@@ -1,0 +1,18 @@
+#pragma once
+
+#ifndef MIN
+#  define MIN(a, b) ((a) < (b) ? (a) : (b))
+#endif
+#ifndef MAX
+#  define MAX(a, b) ((a) > (b) ? (a) : (b))
+#endif
+
+#if __STDC_VERSION__ >= 201112L
+#  define STATIC_ASSERT(cond) _Static_assert(cond, "")
+#else
+#  define STATIC_ASSERT_GLUE(a, b) a##b
+#  define STATIC_ASSERT_XGLUE(a, b) STATIC_ASSERT_GLUE(a, b)
+#  define STATIC_ASSERT(cond)                                                  \
+      typedef char STATIC_ASSERT_XGLUE(static_assert_,                         \
+                                       __LINE__)[(cond) ? 1 : -1]
+#endif
