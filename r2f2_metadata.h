@@ -45,16 +45,17 @@ STATIC_ASSERT(sizeof(struct r2f2_superblock) == BLOCK_SIZE);
 
 typedef uint8_t entry_flags_t;
 #define ENTRY_COMMIT_MASK (1U << 0)
+#define ENTRY_USED_MASK (1U << 1)
 
-struct __attribute__((packed)) dir_meta_entry {
+typedef struct __attribute__((packed)) dir_meta_entry {
     entry_flags_t f;
     char path[MAX_PATH_LEN];
     block_idx next_block;
-};
+} dir_meta_entry_t;
 
-struct dir_meta_block {
+typedef struct dir_meta_block {
     struct dir_meta_entry entries[NUM_DIR_META_ENTRIES];
-};
+} dir_meta_block_t;
 STATIC_ASSERT(sizeof(struct dir_meta_block) == BLOCK_SIZE);
 
 struct __attribute__((packed)) file_meta_entry {
@@ -100,10 +101,18 @@ extern "C" {
 
 /* flip the corresponding bit to 0 (flash is 0xFF by default) */
 entry_flags_t mark_entry_committed(entry_flags_t f);
+entry_flags_t mark_entry_used(entry_flags_t f);
 /* check if the corresponding bit is 0 */
 bool is_entry_committed(entry_flags_t f);
+bool is_entry_used(entry_flags_t f);
+
+r2f2_ret read_dir_entry(r2f2_fs_t *fs, block_idx dir_block_idx, uint32_t idx,
+                        void *buf);
 
 bool is_fs_valid(r2f2_fs_t *fs, r2f2_fs_info_t *fs_info);
+
+RESULT(uint32_t)
+get_free_dir_meta_entry(r2f2_fs_t *fs, block_idx dir_block_idx);
 
 #ifdef __cplusplus
 }

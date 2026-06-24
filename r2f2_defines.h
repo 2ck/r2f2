@@ -1,5 +1,6 @@
 #pragma once
 
+#include "util/result_type.h"
 #include <fcntl.h>
 #include <stdint.h>
 
@@ -14,7 +15,9 @@
 typedef uint32_t block_idx;
 typedef int32_t r2f2_fd;
 
-typedef enum {
-    RET_OK = 0,
-    RET_ERR = -1,
-} r2f2_ret;
+/* for compatibility. TODO: change naming? */
+typedef ret_code_t r2f2_ret;
+
+RESULT_DECL(voidp, void *);
+RESULT_DECL_TRIVIAL(uint32_t);
+RESULT_DECL_TRIVIAL(block_idx);

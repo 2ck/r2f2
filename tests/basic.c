@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
 
     int ret = r2f2_mount(&fs);
     if (ret != RET_OK) {
-        printf("R2F2 mount failed with ret %d\n", ret);
+        printf("R2F2 mount failed (%d)\n", ret);
     } else {
         printf("mount okay\n");
     }
@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
     const char *filename = "/testfile";
     ret = r2f2_open(&fs, filename, O_CREAT | O_RDWR);
     if (ret != RET_OK) {
-        printf("R2F2 open file '%s' failed with ret %d\n", filename, ret);
+        printf("R2F2 open file '%s' failed (%d)\n", filename, ret);
     } else {
         printf("file open okay\n");
     }

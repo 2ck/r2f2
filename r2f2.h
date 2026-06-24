@@ -8,6 +8,7 @@ typedef struct r2f2_cfg r2f2_cfg_t;
 struct r2f2_cfg {
     void *user_ctx;
 
+    /* these functions are expected to return RET_OK on success */
     r2f2_ret (*flash_read)(r2f2_fs_t *fs, uint32_t addr, uint32_t len,
                            void *buf);
     r2f2_ret (*flash_write)(r2f2_fs_t *fs, uint32_t addr, uint32_t len,

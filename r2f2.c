@@ -62,12 +62,18 @@ r2f2_ret r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
      */
 
     r2f2_ret ret = r2f2_find_file(fs, path);
-    if (ret != RET_ERR) {
+    if (ret == RET_OK) {
         R2F2_LOG_INFO("file '%s' exists: found %d", path, ret);
-    } else {
-        R2F2_LOG_INFO("file '%s' doesn't exist. O_CREAT=%s", path,
-                      creat ? "y" : "n");
+    } else if (creat) {
+        ret = r2f2_create_file(fs, path);
+        if (ret != RET_OK) {
+            R2F2_LOG_ERR("file '%s' creation failed (%d)", path, ret);
+        }
+        return ret;
     }
+
+    R2F2_LOG_ERR("file '%s' doesn't exist. O_CREAT=%s", path,
+                 creat ? "y" : "n");
 
     return RET_ERR;
 }

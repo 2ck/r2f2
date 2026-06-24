@@ -16,3 +16,13 @@
       typedef char STATIC_ASSERT_XGLUE(static_assert_,                         \
                                        __LINE__)[(cond) ? 1 : -1]
 #endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+const char *get_basename(const char *path);
+
+#ifdef __cplusplus
+}
+#endif

@@ -1,7 +1,7 @@
 CC ?= cc
 AR ?= ar
 
-SRCS = r2f2.c r2f2_alloc.c r2f2_file.c r2f2_metadata.c
+SRCS = r2f2.c r2f2_alloc.c r2f2_file.c r2f2_metadata.c util/helpers.c
 OBJS = $(patsubst %.c,build/%.o,$(SRCS))
 
 TESTS_SRCS = tests/basic.c

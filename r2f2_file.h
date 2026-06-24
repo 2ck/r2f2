@@ -1,6 +1,7 @@
 #pragma once
 
 #include "r2f2.h"
+#include "r2f2_defines.h"
 #include <stdbool.h>
 
 struct fildes {
@@ -32,6 +33,8 @@ extern "C" {
 #endif
 
 r2f2_ret r2f2_find_file(r2f2_fs_t *fs, const char *path);
+r2f2_ret r2f2_create_file(r2f2_fs_t *fs, const char *path);
+RESULT(block_idx) r2f2_traverse_dirs(r2f2_fs_t *fs, const char *path);
 
 #ifdef __cplusplus
 }
