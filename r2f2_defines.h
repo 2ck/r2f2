@@ -12,6 +12,8 @@
 #define NUM_FILE_META_ENTRIES (256U)
 #define NUM_FILE_INDIR_ENTRIES (128U)
 
+#define MAX_NUM_FDS (32U)
+
 typedef uint32_t block_idx;
 typedef int32_t r2f2_fd;
 
@@ -21,3 +23,4 @@ typedef ret_code_t r2f2_ret;
 RESULT_DECL(voidp, void *);
 RESULT_DECL_TRIVIAL(uint32_t);
 RESULT_DECL_TRIVIAL(block_idx);
+RESULT_DECL_TRIVIAL(r2f2_fd);

@@ -26,15 +26,17 @@ struct fildes {
         size_t count;
         uint8_t data[BLOCK_SIZE];
     } block_buffer;
-};
+} fds[MAX_NUM_FDS];
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 r2f2_ret r2f2_find_file(r2f2_fs_t *fs, const char *path);
-r2f2_ret r2f2_create_file(r2f2_fs_t *fs, const char *path);
+RESULT(r2f2_fd) r2f2_create_file(r2f2_fs_t *fs, const char *path);
 RESULT(block_idx) r2f2_traverse_dirs(r2f2_fs_t *fs, const char *path);
+
+RESULT(r2f2_fd) r2f2_create_fd(r2f2_fs_t *fs, const char *path);
 
 #ifdef __cplusplus
 }

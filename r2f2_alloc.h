@@ -27,7 +27,7 @@ bool is_alloc_used(alloc_flags_t f);
 
 r2f2_ret prepare_block_allocator(r2f2_fs_t *fs);
 
-r2f2_ret allocate_block(r2f2_fs_t *fs);
+RESULT(block_idx) allocate_block(r2f2_fs_t *fs);
 
 #ifdef __cplusplus
 }

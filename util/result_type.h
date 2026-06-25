@@ -8,6 +8,7 @@ typedef enum {
     RET_INVALID_ARG = -2,
     RET_NOT_FOUND = -3,
     RET_NOMEM = -4,
+    RET_OOB = -5,
 } ret_code_t;
 
 #define RESULT(name) result_##name##_t

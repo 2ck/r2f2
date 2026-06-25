@@ -14,7 +14,12 @@ r2f2_ret r2f2_format(r2f2_fs_t *fs) {
     prepare_block_allocator(fs);
 
     fs_info.global_metadata.magic = R2F2_MAGIC;
-    fs_info.root_dir_block = allocate_block(fs);
+    RESULT(block_idx) b = allocate_block(fs);
+    if (b.code != RET_OK) {
+        return b.code;
+    }
+    fs_info.root_dir_block = b.value;
+    fs->root_dir_block = b.value;
 
     r2f2_ret ret =
         fs->cfg->flash_write(fs, R2F2_SUPERBLOCK_IDX * fs->cfg->geom.block_size,
@@ -40,19 +45,21 @@ r2f2_ret r2f2_mount(r2f2_fs_t *fs) {
     if (!is_fs_valid(fs, &fs_info)) {
         /* we need to format */
         r2f2_format(fs);
+    } else {
+        fs->root_dir_block = fs_info.root_dir_block;
     }
 
     /* we are mounted */
     /* TODO: set up buffers/caches or something, idk */
-    fs->root_dir_block = fs_info.root_dir_block;
     return RET_OK;
 }
 
 r2f2_ret r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
     bool creat = oflag & O_CREAT;
 
-    if (!path)
+    if (!path) {
         return RET_ERR;
+    }
 
     /*
      * look for the file
@@ -64,12 +71,14 @@ r2f2_ret r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
     r2f2_ret ret = r2f2_find_file(fs, path);
     if (ret == RET_OK) {
         R2F2_LOG_INFO("file '%s' exists: found %d", path, ret);
+        R2F2_LOG_WARN("TODO: return fd");
     } else if (creat) {
-        ret = r2f2_create_file(fs, path);
-        if (ret != RET_OK) {
+        RESULT(r2f2_fd) fd = r2f2_create_file(fs, path);
+        if (fd.code != RET_OK) {
             R2F2_LOG_ERR("file '%s' creation failed (%d)", path, ret);
+            return fd.code;
         }
-        return ret;
+        return fd.value;
     }
 
     R2F2_LOG_ERR("file '%s' doesn't exist. O_CREAT=%s", path,

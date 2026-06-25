@@ -6,5 +6,10 @@ UseTab: Never
 BreakBeforeBraces: Attach
 AllowShortFunctionsOnASingleLine: None
 
+InsertBraces: True
+
 IndentPPDirectives: AfterHash
 PPIndentWidth: 2
+
+# treat the RESULT macro as a typename to prevent unwanted line breaks
+TypenameMacros: [RESULT]
