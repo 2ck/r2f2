@@ -5,7 +5,7 @@
 typedef enum {
     RET_OK = 0,
     RET_ERR = -1,
-    RET_INVALID_ARG = -2,
+    RET_EINVAL = -2,
     RET_NOT_FOUND = -3,
     RET_NOMEM = -4,
     RET_OOB = -5,
