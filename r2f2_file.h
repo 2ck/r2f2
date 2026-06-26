@@ -32,9 +32,14 @@ struct fildes {
 extern "C" {
 #endif
 
-r2f2_ret r2f2_find_file(r2f2_fs_t *fs, const char *path);
-RESULT(r2f2_fd) r2f2_create_file(r2f2_fs_t *fs, const char *path);
-RESULT(block_idx) r2f2_traverse_dirs(r2f2_fs_t *fs, const char *path);
+/**
+ * returns either the first file_meta_block, or, if the file doesn't exist yet,
+ * the dir_meta_block in which the file should reside
+ */
+RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path);
+RESULT(block_idx) r2f2_find_file_meta_block(r2f2_fs_t *fs, const char *path);
+
+r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path);
 
 RESULT(r2f2_fd) r2f2_create_fd(r2f2_fs_t *fs, const char *path);
 

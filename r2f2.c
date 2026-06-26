@@ -68,21 +68,34 @@ r2f2_ret r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
      * otherwise, error
      */
 
-    r2f2_ret ret = r2f2_find_file(fs, path);
-    if (ret == RET_OK) {
-        R2F2_LOG_INFO("file '%s' exists: found %d", path, ret);
-        R2F2_LOG_WARN("TODO: return fd");
-    } else if (creat) {
-        RESULT(r2f2_fd) fd = r2f2_create_file(fs, path);
-        if (fd.code != RET_OK) {
-            R2F2_LOG_ERR("file '%s' creation failed (%d)", path, ret);
-            return fd.code;
+    RESULT(block_idx) ret = r2f2_find_file_meta_block(fs, path);
+    if (ret.code != RET_OK) {
+        if (creat) {
+            r2f2_ret ret = r2f2_register_file(fs, path);
+            if (ret != RET_OK) {
+                R2F2_LOG_ERR("file '%s' creation failed (%d)", path, ret);
+                return ret;
+            }
+        } else {
+            R2F2_LOG_ERR("file '%s' doesn't exist. O_CREAT=%s", path,
+                         creat ? "y" : "n");
+            return RET_ERR;
         }
-        return fd.value;
     }
 
-    R2F2_LOG_ERR("file '%s' doesn't exist. O_CREAT=%s", path,
-                 creat ? "y" : "n");
+    RESULT(r2f2_fd) fd = r2f2_create_fd(fs, path);
+    if (fd.code != RET_OK) {
+        R2F2_LOG_ERR("failed (%d) to create fd for path '%s'", fd.code, path);
+        return fd.code;
+    }
+    return fd.value;
+}
 
-    return RET_ERR;
+r2f2_ret r2f2_close(r2f2_fs_t *fs, r2f2_fd fd) {
+    if (fd >= MAX_NUM_FDS) {
+        R2F2_LOG_ERR("invalid fd %d", fd);
+        return RET_INVALID_ARG;
+    }
+    fds[fd].active = false;
+    return RET_OK;
 }

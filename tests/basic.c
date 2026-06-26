@@ -49,19 +49,48 @@ int main(int argc, char **argv) {
         .cfg = &cfg,
     };
 
-    int ret = r2f2_mount(&fs);
-    if (ret != RET_OK) {
-        printf("R2F2 mount failed (%d)\n", ret);
-    } else {
-        printf("mount okay\n");
+    {
+        int ret = r2f2_mount(&fs);
+        if (ret != RET_OK) {
+            printf("R2F2 mount failed (%d)\n", ret);
+        } else {
+            printf("mount okay\n");
+        }
     }
 
-    const char *filename = "/testfile";
-    ret = r2f2_open(&fs, filename, O_CREAT | O_RDWR);
-    if (ret != RET_OK) {
-        printf("R2F2 open file '%s' failed (%d)\n", filename, ret);
-    } else {
-        printf("file open okay\n");
+    int fd;
+    {
+        const char *filename = "/testfile";
+        int ret = r2f2_open(&fs, filename, O_CREAT | O_RDWR);
+        if (ret != RET_OK) {
+            printf("R2F2 open file '%s' failed (%d)\n", filename, ret);
+            return ret;
+        } else {
+            printf("file open okay\n");
+            fd = ret;
+        }
+    }
+
+    {
+        int ret = r2f2_close(&fs, ret);
+        if (ret != RET_OK) {
+            printf("R2F2 close fd %d failed (%d)\n", fd, ret);
+            return ret;
+        } else {
+            printf("file close okay\n");
+        }
+    }
+
+    {
+        const char *filename = "/testfile";
+        int ret = r2f2_open(&fs, filename, O_RDWR);
+        if (ret != RET_OK) {
+            printf("R2F2 open file '%s' failed (%d)\n", filename, ret);
+            return ret;
+        } else {
+            printf("file open okay\n");
+            fd = ret;
+        }
     }
 
     return 0;

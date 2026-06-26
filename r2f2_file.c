@@ -4,11 +4,17 @@
 #include "util/logger.h"
 #include <string.h>
 
-r2f2_ret r2f2_find_file(r2f2_fs_t *fs, const char *path) {
-    RESULT(block_idx) ret = r2f2_traverse_dirs(fs, path);
+RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path) {
+    R2F2_LOG_WARN("TODO: unimplemented, always returns root_dir_block");
+    return RESULT_OK(block_idx, fs->root_dir_block);
+    /* return RESULT_ERR(block_idx, RET_NOT_FOUND); */
+}
+
+RESULT(block_idx) r2f2_find_file_meta_block(r2f2_fs_t *fs, const char *path) {
+    RESULT(block_idx) ret = r2f2_find_dir_meta_block(fs, path);
     if (ret.code != RET_OK) {
         R2F2_LOG_ERR("dir traversal failed (%d) for path '%s'", ret.code, path);
-        return ret.code;
+        return ret;
     }
 
     block_idx file_dir_block_idx = ret.value;
@@ -18,7 +24,7 @@ r2f2_ret r2f2_find_file(r2f2_fs_t *fs, const char *path) {
     const char *b = get_basename(path);
     if (!b) {
         R2F2_LOG_ERR("could not get basename for path '%s'", path);
-        return RET_ERR;
+        return RESULT_ERR(block_idx, RET_ERR);
     }
     /*
      * make sure to also copy '\0' terminator, important in case we don't have a
@@ -30,20 +36,19 @@ r2f2_ret r2f2_find_file(r2f2_fs_t *fs, const char *path) {
     for (size_t i = 0; i < NUM_DIR_META_ENTRIES; i++) {
         read_dir_meta_entry(fs, file_dir_block_idx, i, &dme);
         if (memcmp(dme.path, file_basename, MAX_PATH_LEN) == 0) {
-            R2F2_LOG_INFO("return %d", dme.next_block);
-            return dme.next_block;
+            return RESULT_OK(block_idx, dme.next_block);
         }
     }
 
-    return RET_ERR;
+    return RESULT_ERR(block_idx, RET_ERR);
 }
 
-RESULT(r2f2_fd) r2f2_create_file(r2f2_fs_t *fs, const char *path) {
-    RESULT(block_idx) dir_meta_block_idx = r2f2_traverse_dirs(fs, path);
+r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path) {
+    RESULT(block_idx) dir_meta_block_idx = r2f2_find_dir_meta_block(fs, path);
     if (dir_meta_block_idx.code != RET_OK) {
         R2F2_LOG_ERR("dir traversal failed (%d) for path '%s'",
                      dir_meta_block_idx.code, path);
-        return RESULT_ERR(r2f2_fd, dir_meta_block_idx.code);
+        return dir_meta_block_idx.code;
     }
     /*
      * we assume the directory exists already
@@ -55,7 +60,7 @@ RESULT(r2f2_fd) r2f2_create_file(r2f2_fs_t *fs, const char *path) {
         R2F2_LOG_WARN(
             "TODO (unhandled): failed (%d) to get dir_entry in block %u",
             dme_num.code, dir_meta_block_idx.value);
-        return RESULT_ERR(r2f2_fd, dme_num.code);
+        return dme_num.code;
     }
 
     /*
@@ -66,7 +71,7 @@ RESULT(r2f2_fd) r2f2_create_file(r2f2_fs_t *fs, const char *path) {
 
     RESULT(block_idx) data_block_idx = allocate_block(fs);
     if (data_block_idx.code != RET_OK) {
-        return RESULT_ERR(r2f2_fd, data_block_idx.code);
+        return data_block_idx.code;
     }
 
     file_indir_entry_t fie;
@@ -75,12 +80,12 @@ RESULT(r2f2_fd) r2f2_create_file(r2f2_fs_t *fs, const char *path) {
 
     RESULT(block_idx) file_indir_block_idx = allocate_block(fs);
     if (file_indir_block_idx.code != RET_OK) {
-        return RESULT_ERR(r2f2_fd, file_indir_block_idx.code);
+        return file_indir_block_idx.code;
     }
     r2f2_ret ret =
         write_file_indir_entry(fs, file_indir_block_idx.value, 0, &fie);
     if (ret != RET_OK) {
-        return RESULT_ERR(r2f2_fd, ret);
+        return ret;
     }
 
     file_meta_entry_t fme;
@@ -89,11 +94,11 @@ RESULT(r2f2_fd) r2f2_create_file(r2f2_fs_t *fs, const char *path) {
 
     RESULT(block_idx) file_meta_block_idx = allocate_block(fs);
     if (file_meta_block_idx.code != RET_OK) {
-        return RESULT_ERR(r2f2_fd, file_meta_block_idx.code);
+        return file_meta_block_idx.code;
     }
     ret = write_file_meta_entry(fs, file_meta_block_idx.value, 0, &fme);
     if (ret != RET_OK) {
-        return RESULT_ERR(r2f2_fd, ret);
+        return ret;
     }
 
     dir_meta_entry_t dme;
@@ -103,7 +108,7 @@ RESULT(r2f2_fd) r2f2_create_file(r2f2_fs_t *fs, const char *path) {
     const char *b = get_basename(path);
     if (!b) {
         R2F2_LOG_ERR("could not get basename for path '%s'", path);
-        return RESULT_ERR(r2f2_fd, RET_ERR);
+        return RET_ERR;
     }
     /*
      * make sure to also copy '\0' terminator, important in case we don't have a
@@ -118,7 +123,7 @@ RESULT(r2f2_fd) r2f2_create_file(r2f2_fs_t *fs, const char *path) {
     ret =
         write_dir_meta_entry(fs, dir_meta_block_idx.value, dme_num.value, &dme);
     if (ret != RET_OK) {
-        return RESULT_ERR(r2f2_fd, ret);
+        return ret;
     }
 
     /* commit, starting from the leaf to the root */
@@ -126,31 +131,20 @@ RESULT(r2f2_fd) r2f2_create_file(r2f2_fs_t *fs, const char *path) {
     ret =
         write_file_indir_entry_flags(fs, file_indir_block_idx.value, 0, &fie.f);
     if (ret != RET_OK) {
-        return RESULT_ERR(r2f2_fd, ret);
+        return ret;
     }
     mark_entry_committed(&fme.f);
     ret = write_file_meta_entry_flags(fs, file_meta_block_idx.value, 0, &fme.f);
     if (ret != RET_OK) {
-        return RESULT_ERR(r2f2_fd, ret);
+        return ret;
     }
     mark_entry_committed(&dme.f);
     ret = write_dir_meta_entry_flags(fs, dir_meta_block_idx.value, 0, &dme.f);
     if (ret != RET_OK) {
-        return RESULT_ERR(r2f2_fd, ret);
+        return ret;
     }
 
-    RESULT(r2f2_fd) fd = r2f2_create_fd(fs, path);
-    if (fd.code != RET_OK) {
-        R2F2_LOG_ERR("failed (%d) to get fd for path '%s'", fd.code, path);
-        return RESULT_ERR(r2f2_fd, fd.code);
-    }
-    return RESULT_ERR(r2f2_fd, fd.value);
-}
-
-RESULT(block_idx) r2f2_traverse_dirs(r2f2_fs_t *fs, const char *path) {
-    R2F2_LOG_WARN("TODO: unimplemented, always returns root_dir_block");
-    return RESULT_OK(block_idx, fs->root_dir_block);
-    /* return RESULT_ERR(block_idx, RET_NOT_FOUND); */
+    return RET_OK;
 }
 
 RESULT(r2f2_fd) r2f2_create_fd(r2f2_fs_t *fs, const char *path) {
