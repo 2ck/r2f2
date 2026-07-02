@@ -54,11 +54,12 @@ int main(int argc, char **argv) {
         if (ret != RET_OK) {
             printf("R2F2 mount failed (%d)\n", ret);
         } else {
-            printf("mount okay\n");
+            printf("R2F2 mount okay\n");
         }
     }
 
     int fd;
+    /* should succeed */
     {
         const char *filename = "/testfile";
         int ret = r2f2_open(&fs, filename, O_CREAT | O_RDWR);
@@ -66,21 +67,23 @@ int main(int argc, char **argv) {
             printf("R2F2 open file '%s' failed (%d)\n", filename, ret);
             return ret;
         } else {
-            printf("file open okay\n");
+            printf("R2F2 open file '%s' okay\n", filename);
             fd = ret;
         }
     }
 
+    /* should succeed */
     {
         int ret = r2f2_close(&fs, ret);
         if (ret != RET_OK) {
             printf("R2F2 close fd %d failed (%d)\n", fd, ret);
             return ret;
         } else {
-            printf("file close okay\n");
+            printf("R2F2 close fd %d okay\n", fd);
         }
     }
 
+    /* should succeed */
     {
         const char *filename = "/testfile";
         int ret = r2f2_open(&fs, filename, O_RDWR);
@@ -88,7 +91,24 @@ int main(int argc, char **argv) {
             printf("R2F2 open file '%s' failed (%d)\n", filename, ret);
             return ret;
         } else {
-            printf("file open okay\n");
+            printf("R2F2 open file '%s' okay\n", filename);
+            fd = ret;
+        }
+    }
+
+    /* should fail */
+    {
+        const char *filename = "/foo/bar/testfile";
+        int ret = r2f2_open(&fs, filename, O_CREAT | O_RDWR);
+        if (ret == RET_OK) {
+            printf("R2F2 open file '%s' succeeded when it shouldn't have "
+                   "(missing directory)\n",
+                   filename);
+            return RET_ERR;
+        } else {
+            printf(
+                "R2F2 open file '%s' in non-existing dir failed as it should\n",
+                filename);
             fd = ret;
         }
     }

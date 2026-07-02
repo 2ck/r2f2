@@ -68,8 +68,8 @@ r2f2_ret r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
      * otherwise, error
      */
 
-    RESULT(block_idx) ret = r2f2_find_file_meta_block(fs, path);
-    if (ret.code != RET_OK) {
+    RESULT(block_idx) fmb_ret = r2f2_find_file_meta_block(fs, path);
+    if (fmb_ret.code == RET_FILE_NOT_FOUND) {
         if (creat) {
             r2f2_ret ret = r2f2_register_file(fs, path);
             if (ret != RET_OK) {
@@ -81,6 +81,8 @@ r2f2_ret r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
                          creat ? "y" : "n");
             return RET_ERR;
         }
+    } else if (fmb_ret.code != RET_OK) {
+        return fmb_ret.code;
     }
 
     RESULT(r2f2_fd) fd = r2f2_create_fd(fs, path);

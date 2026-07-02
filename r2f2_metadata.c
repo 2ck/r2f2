@@ -221,5 +221,5 @@ RESULT(uint32_t) get_free_dir_meta_entry(r2f2_fs_t *fs,
             return RESULT_OK(uint32_t, i);
         }
     }
-    return RESULT_ERR(uint32_t, RET_NOT_FOUND);
+    return RESULT_ERR(uint32_t, RET_NOMEM);
 }

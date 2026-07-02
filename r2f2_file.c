@@ -2,18 +2,121 @@
 #include "r2f2_alloc.h"
 #include "r2f2_metadata.h"
 #include "util/logger.h"
+#include <assert.h>
 #include <string.h>
 
 RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path) {
-    R2F2_LOG_WARN("TODO: unimplemented, always returns root_dir_block");
-    return RESULT_OK(block_idx, fs->root_dir_block);
-    /* return RESULT_ERR(block_idx, RET_NOT_FOUND); */
+    if (!path) {
+        return RESULT_ERR(block_idx, RET_EINVAL);
+    }
+
+    /*
+     * The path is of the form `/foo/bar/baz`, where the root dir block contains
+     * the entry for the `bar` directory, and of course any other files that may
+     * be in the root directory.
+     */
+
+    /* Therefore, we first have to sanity check that the path is valid */
+    if (*path != '/') {
+        R2F2_LOG_ERR("invalid path '%s'", path);
+        return RESULT_ERR(block_idx, RET_EINVAL);
+    }
+
+    /* find number of directories in path, one for each '/' */
+    const char *path_copy = path + 1;
+    int32_t dir_depth = 0;
+    while (*path_copy != '\0') {
+        if (*path_copy == '/') {
+            dir_depth++;
+
+            /* we can't have two slashes after another */
+            if (*(path_copy + 1) == '/') {
+                R2F2_LOG_ERR("invalid path '%s'", path);
+                return RESULT_ERR(block_idx, RET_EINVAL);
+            }
+        }
+
+        path_copy++;
+    }
+
+    /*
+     * we start in the root bock and also return it by default, in case our
+     * depth is 0 so our file lies in the root directory
+     */
+    block_idx current_block = fs->root_dir_block;
+
+    const char *seg_start = path + 1;
+    const char *seg_end = seg_start;
+
+    /*
+     * Then we find the first directory and continue until there are no more
+     * directories (until last `/`). If we are in the root directory, dir_depth
+     * is = 0 and there is nothing to do here.
+     */
+    int32_t current_depth = dir_depth;
+    while (current_depth-- > 0) {
+        /* if we happen to iterate outside our valid path, we have hit a bug */
+        assert(seg_end - path < MAX_PATH_LEN);
+        /* figure out this directory's path segment */
+        while (*seg_end != '\0') {
+            /* slash found */
+            if (*seg_end == '/') {
+                break;
+            }
+
+            seg_end++;
+        }
+
+        size_t seg_len = seg_end - seg_start;
+        if (seg_len == 0 || seg_len >= MAX_PATH_LEN) {
+            R2F2_LOG_ERR("path segment length %zu invalid", seg_len);
+            return RESULT_ERR(block_idx, RET_EINVAL);
+        }
+
+        char segment[MAX_PATH_LEN];
+        /* the path we persist to flash has 0 instead of 0xFF in unused space */
+        memset(segment, 0, sizeof(segment));
+        memcpy(segment, seg_start, seg_len);
+
+        dir_meta_entry_t dme;
+        memset(&dme, 0xFF, sizeof(dir_meta_entry_t));
+
+        bool found_entry = false;
+        for (size_t i = 0; i < NUM_DIR_META_ENTRIES; i++) {
+            read_dir_meta_entry(fs, current_block, i, &dme);
+
+            /*
+             * abort as soon as we find our first unused entry (no more valid
+             * ones can come after)
+             */
+            if (!is_entry_used(dme.f)) {
+                break;
+            }
+
+            if (memcmp(dme.path, segment, MAX_PATH_LEN) == 0) {
+                current_block = dme.next_block;
+                found_entry = true;
+            }
+        }
+
+        if (!found_entry) {
+            R2F2_LOG_ERR("could not find matching dir_meta_entry for path '%s' "
+                         "segment '%s'",
+                         path, segment);
+            return RESULT_ERR(block_idx, RET_DIR_NOT_FOUND);
+        }
+
+        seg_end++;
+        seg_start = seg_end;
+    }
+    return RESULT_OK(block_idx, current_block);
 }
 
 RESULT(block_idx) r2f2_find_file_meta_block(r2f2_fs_t *fs, const char *path) {
     RESULT(block_idx) ret = r2f2_find_dir_meta_block(fs, path);
     if (ret.code != RET_OK) {
-        R2F2_LOG_ERR("dir traversal failed (%d) for path '%s'", ret.code, path);
+        R2F2_LOG_ERR("traversal to dir_meta_block failed (%d) for path '%s'",
+                     ret.code, path);
         return ret;
     }
 
@@ -40,7 +143,7 @@ RESULT(block_idx) r2f2_find_file_meta_block(r2f2_fs_t *fs, const char *path) {
         }
     }
 
-    return RESULT_ERR(block_idx, RET_ERR);
+    return RESULT_ERR(block_idx, RET_FILE_NOT_FOUND);
 }
 
 r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path) {
