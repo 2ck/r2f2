@@ -15,7 +15,7 @@
 #define MAX_NUM_FDS (32U)
 
 typedef uint32_t block_idx;
-typedef int32_t r2f2_fd;
+typedef uint32_t r2f2_fd;
 
 /* for compatibility. TODO: change naming? */
 typedef ret_code_t r2f2_ret;

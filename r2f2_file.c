@@ -251,6 +251,7 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path) {
 }
 
 RESULT(r2f2_fd) r2f2_create_fd(r2f2_fs_t *fs, const char *path) {
+    (void)fs;
     for (size_t i = 0; i < MAX_NUM_FDS; i++) {
         if (fds[i].active) {
             continue;

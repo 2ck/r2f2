@@ -25,6 +25,8 @@ r2f2_ret flash_erase(r2f2_fs_t *fs, uint32_t addr, uint32_t len) {
 }
 
 int main(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
     void *flash = malloc(FLASH_NUM_BLOCKS * FLASH_BLOCK_SIZE);
     if (!flash) {
         printf("Error during malloc.");
@@ -74,7 +76,7 @@ int main(int argc, char **argv) {
 
     /* should succeed */
     {
-        int ret = r2f2_close(&fs, ret);
+        int ret = r2f2_close(&fs, fd);
         if (ret != RET_OK) {
             printf("R2F2 close fd %d failed (%d)\n", fd, ret);
             return ret;

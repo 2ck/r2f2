@@ -202,6 +202,7 @@ bool is_fs_valid(r2f2_fs_t *fs, r2f2_fs_info_t *fs_info) {
         return false;
     }
     /* TODO: check geometry etc. */
+    (void)fs;
     return true;
 }
 
