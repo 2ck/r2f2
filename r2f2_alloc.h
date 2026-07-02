@@ -12,6 +12,7 @@
 #endif
 
 typedef uint8_t alloc_flags_t;
+#define ALLOC_FLAGS_INITIAL 0xFF
 #define ALLOC_USED_MASK (1U << 0)
 
 #define FIRST_ALLOCABLE_BLOCK (128U)
@@ -21,7 +22,7 @@ extern "C" {
 #endif
 
 /* flip the corresponding bit to 0 (flash is 0xFF by default) */
-alloc_flags_t mark_alloc_used(alloc_flags_t f);
+void mark_alloc_used(alloc_flags_t *f);
 /* check if the corresponding bit is 0 */
 bool is_alloc_used(alloc_flags_t f);
 

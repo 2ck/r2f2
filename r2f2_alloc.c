@@ -12,8 +12,8 @@
 // there is additionally a per-page header to be able to safely
 // move the entries to a new block when an erase is needed
 
-alloc_flags_t mark_alloc_used(alloc_flags_t f) {
-    return f &= ~ALLOC_USED_MASK;
+void mark_alloc_used(alloc_flags_t *f) {
+    *f &= ~ALLOC_USED_MASK;
 }
 bool is_alloc_used(alloc_flags_t f) {
     return (f & ALLOC_USED_MASK) == 0;
@@ -30,8 +30,8 @@ STATIC_ASSERT(sizeof(struct alloc_bitmap_block) == BLOCK_SIZE);
 block_idx alloc_bitmap_block_idx = FIRST_ALLOCABLE_BLOCK - 1;
 r2f2_ret prepare_block_allocator(r2f2_fs_t *fs) {
     // mark all alloc bitmap chunks as valid
-    alloc_flags_t flags;
-    mark_alloc_used(flags);
+    alloc_flags_t flags = ALLOC_FLAGS_INITIAL;
+    mark_alloc_used(&flags);
 
     for (size_t i = 0; i < 16; i++) {
         /* TODO get rid of magic number 256 with sizeof */
