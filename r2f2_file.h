@@ -33,15 +33,27 @@ extern "C" {
 #endif
 
 /**
- * returns either the first file_meta_block, or, if the file doesn't exist yet,
- * the dir_meta_block in which the file should reside
+ * returns the dir_meta_block in which the file resides, or a DIR_NOT_FOUND
+ * error in case no matching dir_meta_block was found
  */
 RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path);
+/**
+ * returns the file's first file_meta_block as pointed to by the dir_meta_entry,
+ * or a FILE_NOT_FOUND error in case no matching entry was found
+ */
 RESULT(block_idx) r2f2_find_file_meta_block(r2f2_fs_t *fs, const char *path);
 
+/**
+ * creates the in-flash metadata for a file. the directory the file resides in
+ * must already exist
+ */
 r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path);
 
+/**
+ * create an in-RAM file descriptor
+ */
 RESULT(r2f2_fd) r2f2_create_fd(r2f2_fs_t *fs, const char *path);
+r2f2_ret r2f2_fd_valid(r2f2_fs_t *fs, r2f2_fd fd);
 
 #ifdef __cplusplus
 }

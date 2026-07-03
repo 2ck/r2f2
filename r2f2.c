@@ -94,11 +94,12 @@ r2f2_ret r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
 }
 
 r2f2_ret r2f2_close(r2f2_fs_t *fs, r2f2_fd fd) {
-    (void)fs;
-    if (fd >= MAX_NUM_FDS) {
-        R2F2_LOG_ERR("invalid fd %d", fd);
-        return RET_EINVAL;
+    r2f2_ret ret = r2f2_fd_valid(fs, fd);
+    if (ret != RET_OK) {
+        R2F2_LOG_ERR("invalid (%d) fd %d", ret, fd);
+        return ret;
     }
+
     fds[fd].active = false;
     return RET_OK;
 }

@@ -153,10 +153,7 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path) {
                      dir_meta_block_idx.code, path);
         return dir_meta_block_idx.code;
     }
-    /*
-     * we assume the directory exists already
-     * then, traverse_dirs returned the corresponding dir block
-     */
+
     RESULT(uint32_t) dme_num =
         get_free_dir_meta_entry(fs, dir_meta_block_idx.value);
     if (dme_num.code != RET_OK) {
@@ -261,4 +258,16 @@ RESULT(r2f2_fd) r2f2_create_fd(r2f2_fs_t *fs, const char *path) {
         return RESULT_OK(r2f2_fd, i);
     }
     return RESULT_ERR(r2f2_fd, RET_NOMEM);
+}
+
+r2f2_ret r2f2_fd_valid(r2f2_fs_t *fs, r2f2_fd fd) {
+    if (fd < 0 || fd >= MAX_NUM_FDS) {
+        R2F2_LOG_ERR("Out-of-bounds fd %d", fd);
+        return RET_OOB;
+    }
+    if (fds[fd].active != true) {
+        R2F2_LOG_ERR("file descriptor %d did not exist", fd);
+        return RET_ERR;
+    }
+    return RET_OK;
 }
