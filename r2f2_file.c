@@ -2,7 +2,6 @@
 #include "r2f2_alloc.h"
 #include "r2f2_metadata.h"
 #include "util/logger.h"
-#include <assert.h>
 #include <string.h>
 
 RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path) {
@@ -56,7 +55,7 @@ RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path) {
     int32_t current_depth = dir_depth;
     while (current_depth-- > 0) {
         /* if we happen to iterate outside our valid path, we have hit a bug */
-        assert(seg_end - path < MAX_PATH_LEN);
+        R2F2_ASSERT(seg_end - path, <, (long)MAX_PATH_LEN, "%ld");
         /* figure out this directory's path segment */
         while (*seg_end != '\0') {
             /* slash found */
@@ -261,6 +260,7 @@ RESULT(r2f2_fd) r2f2_create_fd(r2f2_fs_t *fs, const char *path) {
 }
 
 r2f2_ret r2f2_fd_valid(r2f2_fs_t *fs, r2f2_fd fd) {
+    (void)fs;
     if (fd < 0 || fd >= MAX_NUM_FDS) {
         R2F2_LOG_ERR("Out-of-bounds fd %d", fd);
         return RET_OOB;

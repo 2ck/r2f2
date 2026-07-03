@@ -9,8 +9,8 @@ TESTS_OBJS = $(patsubst %.c,build/%.o,$(TESTS_SRCS))
 TESTS_BINS = $(patsubst %.c,build/%,$(TESTS_SRCS))
 
 CFLAGS += -Wall -Wextra -Wpedantic
-# disable a warning for the logging macros:
-CFLAGS += -Wno-gnu-zero-variadic-macro-arguments
+# disable warnings for the logging macros:
+CFLAGS += -Wno-gnu-zero-variadic-macro-arguments -Wno-gnu-auto-type
 CFLAGS += -g -O0 -std=c11 -I.
 LDFLAGS += -L build -l r2f2
 

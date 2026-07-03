@@ -1,7 +1,6 @@
 #include "r2f2_alloc.h"
 #include "util/helpers.h"
 #include "util/logger.h"
-#include <assert.h>
 
 #if (R2F2_ALLOC_METHOD == R2F2_ALLOC_BITFIELD)
 // one or more allocation blocks contain bitfields
@@ -153,8 +152,8 @@ static uint32_t _alloc_region_start_ptr;
 static uint32_t _alloc_region_alloc_ptr;
 static uint32_t _alloc_region_next_free_ptr;
 
-#  define ALLOC_REGION_FIRST_BLOCK 16
-#  define ALLOC_REGION_LAST_BLOCK 48
+#  define ALLOC_REGION_FIRST_BLOCK (16U)
+#  define ALLOC_REGION_LAST_BLOCK (48U)
 
 static inline r2f2_ret advance_alloc_ptr(r2f2_fs_t *fs) {
     uint32_t new_alloc_ptr =
@@ -274,8 +273,8 @@ r2f2_ret prepare_block_allocator(r2f2_fs_t *fs) {
                    _alloc_region_next_free_ptr / fs->cfg->geom.block_size,
                    _alloc_region_start_ptr, _alloc_region_next_free_ptr);
 
-    assert(_alloc_region_next_free_ptr <
-           ALLOC_REGION_LAST_BLOCK * fs->cfg->geom.block_size);
+    R2F2_ASSERT(_alloc_region_next_free_ptr, <,
+                ALLOC_REGION_LAST_BLOCK * fs->cfg->geom.block_size, "%u");
 
     return RET_OK;
 }

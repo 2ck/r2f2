@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #ifndef R2F2_PRINTF
 #  define R2F2_PRINTF printf
@@ -35,3 +36,18 @@ typedef enum {
 #define R2F2_LOG_INFO(...) R2F2_LOG(LOGLV_INFO, __VA_ARGS__)
 #define R2F2_LOG_WARN(...) R2F2_LOG(LOGLV_WARN, __VA_ARGS__)
 #define R2F2_LOG_DEBUG(...) R2F2_LOG(LOGLV_DEBUG, __VA_ARGS__)
+
+#ifndef R2F2_ABORT
+#  define R2F2_ABORT abort
+#endif
+
+#define R2F2_ASSERT(thing, cond, otherthing, fmt)                              \
+    do {                                                                       \
+        __auto_type _thing = (thing);                                          \
+        __auto_type _otherthing = (otherthing);                                \
+        if (!(_thing cond _otherthing)) {                                      \
+            R2F2_LOG_ERR(#thing " is " fmt ", expected " fmt, _thing,          \
+                         _otherthing);                                         \
+            R2F2_ABORT();                                                      \
+        }                                                                      \
+    } while (0)
