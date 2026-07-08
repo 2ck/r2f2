@@ -55,7 +55,7 @@ RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path) {
     int32_t current_depth = dir_depth;
     while (current_depth-- > 0) {
         /* if we happen to iterate outside our valid path, we have hit a bug */
-        R2F2_ASSERT(seg_end - path, <, (long)MAX_PATH_LEN, "%ld");
+        R2F2_ASSERT(seg_end - path, <, MAX_PATH_LEN, "%ld");
         /* figure out this directory's path segment */
         while (*seg_end != '\0') {
             /* slash found */

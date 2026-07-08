@@ -44,7 +44,7 @@ typedef enum {
 #define R2F2_ASSERT(thing, cond, otherthing, fmt)                              \
     do {                                                                       \
         __auto_type _thing = (thing);                                          \
-        __auto_type _otherthing = (otherthing);                                \
+        __typeof__(_thing) _otherthing = (otherthing);                         \
         if (!(_thing cond _otherthing)) {                                      \
             R2F2_LOG_ERR(#thing " is " fmt ", expected " fmt, _thing,          \
                          _otherthing);                                         \
