@@ -144,9 +144,9 @@ RESULT(block_idx) allocate_block(r2f2_fs_t *fs) {
  *
  */
 
-typedef struct __attribute__((packed)) alloc_block_entry_t {
+typedef struct __attribute__((packed)) alloc_block_entry {
     block_idx b;
-} alloc_block_entry;
+} alloc_block_entry_t;
 
 static uint32_t _alloc_region_start_ptr;
 static uint32_t _alloc_region_alloc_ptr;
@@ -157,7 +157,7 @@ static uint32_t _alloc_region_next_free_ptr;
 
 static inline r2f2_ret advance_alloc_ptr(r2f2_fs_t *fs) {
     uint32_t new_alloc_ptr =
-        _alloc_region_alloc_ptr + sizeof(alloc_block_entry);
+        _alloc_region_alloc_ptr + sizeof(alloc_block_entry_t);
 
     /* our alloc pointer must not move outside of our alloc block range */
     if (new_alloc_ptr >=
@@ -194,7 +194,7 @@ static inline r2f2_ret advance_alloc_ptr(r2f2_fs_t *fs) {
 
 static inline r2f2_ret advance_next_free_ptr(r2f2_fs_t *fs) {
     uint32_t new_next_free_ptr =
-        _alloc_region_next_free_ptr + sizeof(alloc_block_entry);
+        _alloc_region_next_free_ptr + sizeof(alloc_block_entry_t);
 
     /* our next_free pointer must not move outside of our alloc block range */
     if (new_next_free_ptr >=
@@ -247,10 +247,11 @@ r2f2_ret prepare_block_allocator(r2f2_fs_t *fs) {
     size_t entry_idx = 0;
     for (block_idx b = FIRST_ALLOCABLE_BLOCK; b < fs->cfg->geom.num_blocks;
          b++) {
-        alloc_block_entry entry = {.b = b};
+        alloc_block_entry_t entry = {.b = b};
         r2f2_ret ret = fs->cfg->flash_write(
-            fs, _alloc_region_start_ptr + sizeof(alloc_block_entry) * entry_idx,
-            sizeof(alloc_block_entry), &entry);
+            fs,
+            _alloc_region_start_ptr + sizeof(alloc_block_entry_t) * entry_idx,
+            sizeof(alloc_block_entry_t), &entry);
         if (ret != RET_OK) {
             R2F2_LOG_ERR("write block idx %u failed (%d)", b, ret);
             return ret;
@@ -259,7 +260,7 @@ r2f2_ret prepare_block_allocator(r2f2_fs_t *fs) {
         entry_idx++;
     }
     _alloc_region_next_free_ptr =
-        _alloc_region_start_ptr + sizeof(alloc_block_entry) * entry_idx;
+        _alloc_region_start_ptr + sizeof(alloc_block_entry_t) * entry_idx;
 
     R2F2_LOG_DEBUG("valid alloc region from block %u to %u (0x%x to 0x%x), "
                    "entry size %zu, num_entries %u, actual entries from block "
@@ -267,7 +268,7 @@ r2f2_ret prepare_block_allocator(r2f2_fs_t *fs) {
                    ALLOC_REGION_FIRST_BLOCK, ALLOC_REGION_LAST_BLOCK,
                    ALLOC_REGION_FIRST_BLOCK * fs->cfg->geom.block_size,
                    ALLOC_REGION_LAST_BLOCK * fs->cfg->geom.block_size,
-                   sizeof(alloc_block_entry),
+                   sizeof(alloc_block_entry_t),
                    fs->cfg->geom.num_blocks - FIRST_ALLOCABLE_BLOCK,
                    _alloc_region_start_ptr / fs->cfg->geom.block_size,
                    _alloc_region_next_free_ptr / fs->cfg->geom.block_size,
@@ -280,9 +281,9 @@ r2f2_ret prepare_block_allocator(r2f2_fs_t *fs) {
 }
 
 RESULT(block_idx) allocate_block(r2f2_fs_t *fs) {
-    alloc_block_entry entry;
+    alloc_block_entry_t entry;
     r2f2_ret ret = fs->cfg->flash_read(fs, _alloc_region_alloc_ptr,
-                                       sizeof(alloc_block_entry), &entry);
+                                       sizeof(alloc_block_entry_t), &entry);
     if (ret != RET_OK) {
         R2F2_LOG_ERR("alloc: read block_entry at 0x%x (off %u) failed",
                      _alloc_region_alloc_ptr,
@@ -302,8 +303,8 @@ RESULT(block_idx) allocate_block(r2f2_fs_t *fs) {
 
     // invalidate entry and move pointer along
     entry.b = 0;
-    fs->cfg->flash_write(fs, _alloc_region_alloc_ptr, sizeof(alloc_block_entry),
-                         &entry);
+    fs->cfg->flash_write(fs, _alloc_region_alloc_ptr,
+                         sizeof(alloc_block_entry_t), &entry);
 
     ret = advance_alloc_ptr(fs);
     if (ret != RET_OK) {
@@ -320,9 +321,9 @@ r2f2_ret free_block(r2f2_fs_t *fs, block_idx b) {
         return RET_ERR;
     }
 
-    alloc_block_entry entry = {.b = b};
+    alloc_block_entry_t entry = {.b = b};
     fs->cfg->flash_write(fs, _alloc_region_next_free_ptr,
-                         sizeof(alloc_block_entry), &entry);
+                         sizeof(alloc_block_entry_t), &entry);
 
     r2f2_ret ret = advance_next_free_ptr(fs);
     if (ret != RET_OK) {
