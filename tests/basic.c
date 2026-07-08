@@ -147,7 +147,7 @@ int main(int argc, char **argv) {
         int ret = r2f2_read(&fs, fd, read_buf, strlen(write_buf) + 1);
         if (ret != RET_OK) {
             printf("R2F2 read %zu B from file '%s' failed (%d)\n",
-                   sizeof(read_buf), filename, ret);
+                   strlen(write_buf) + 1, filename, ret);
             return ret;
         } else {
             printf("R2F2 read '%s' (%zu B) from file '%s' okay\n", read_buf,
