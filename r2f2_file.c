@@ -145,7 +145,7 @@ RESULT(block_idx) r2f2_find_file_meta_block(r2f2_fs_t *fs, const char *path) {
     return RESULT_ERR(block_idx, RET_FILE_NOT_FOUND);
 }
 
-r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path) {
+r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path, r2f2_fd fd) {
     RESULT(block_idx) dir_meta_block_idx = r2f2_find_dir_meta_block(fs, path);
     if (dir_meta_block_idx.code != RET_OK) {
         R2F2_LOG_ERR("dir traversal failed (%d) for path '%s'",
@@ -175,6 +175,9 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path) {
 
     file_indir_entry_t fie;
     fie.data_block = data_block_idx.value;
+    fie.data_block_fill_level = 0;
+    fie.data_block_offset_in_file = 0;
+    fie.current_file_size = 0;
     mark_entry_used(&fie.f);
 
     RESULT(block_idx) file_indir_block_idx = allocate_block(fs);
@@ -215,7 +218,7 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path) {
      */
     memcpy(dme.path, b, strlen(b) + 1);
 
-    dme.next_block = file_indir_block_idx.value;
+    dme.next_block = file_meta_block_idx.value;
 
     mark_entry_used(&dme.f);
 
@@ -242,6 +245,15 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path) {
     if (ret != RET_OK) {
         return ret;
     }
+
+    fildes_t *f = &fds[fd];
+    f->file_offset = 0;
+    f->file_size = 0;
+    f->file_meta_block = file_meta_block_idx.value;
+    f->last_data_block = data_block_idx.value;
+    f->last_data_block_fill = 0;
+    f->last_indir_block = file_indir_block_idx.value;
+    f->next_indir_entry_idx = 1;
 
     return RET_OK;
 }

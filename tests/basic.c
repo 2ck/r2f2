@@ -111,7 +111,47 @@ int main(int argc, char **argv) {
             printf(
                 "R2F2 open file '%s' in non-existing dir failed as it should\n",
                 filename);
-            fd = ret;
+        }
+    }
+
+    const char *write_buf = "Here we have some test data to be written.";
+    /* write */
+    {
+        const char *filename = "/testfile";
+        int ret = r2f2_write(&fs, fd, write_buf, strlen(write_buf) + 1);
+        if (ret != RET_OK) {
+            printf("R2F2 write '%s' to file '%s' failed (%d)\n", write_buf,
+                   filename, ret);
+            return ret;
+        } else {
+            printf("R2F2 write '%s' to file '%s' okay\n", write_buf, filename);
+        }
+    }
+
+    /* fsync */
+    {
+        int ret = r2f2_fsync(&fs, fd);
+        if (ret != RET_OK) {
+            printf("R2F2 fsync fd %d failed (%d)\n", fd, ret);
+            return ret;
+        } else {
+            printf("R2F2 fsync fd %d okay\n", fd);
+        }
+    }
+
+    /* read back */
+    {
+        const char *filename = "/testfile";
+        uint8_t read_buf[FLASH_PAGE_SIZE];
+        memset(read_buf, 0, sizeof(read_buf));
+        int ret = r2f2_read(&fs, fd, read_buf, strlen(write_buf) + 1);
+        if (ret != RET_OK) {
+            printf("R2F2 read %zu B from file '%s' failed (%d)\n",
+                   sizeof(read_buf), filename, ret);
+            return ret;
+        } else {
+            printf("R2F2 read '%s' (%zu B) from file '%s' okay\n", read_buf,
+                   strlen(write_buf) + 1, filename);
         }
     }
 

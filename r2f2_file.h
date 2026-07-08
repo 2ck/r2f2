@@ -4,29 +4,30 @@
 #include "r2f2_defines.h"
 #include <stdbool.h>
 
-struct fildes {
+typedef struct fildes {
     char path[MAX_PATH_LEN];
     bool active;
-    /* block_idx meta_block; */
-    /* block_idx dir_block; */
-    /* // block_idx start_block = 0; */
-    /* block_idx last_block = 0; */
-    /* size_t file_offset = 0; */
-    /* size_t file_size = 0; */
-    /* size_t last_block_fill_level = 0; */
 
-    /* // should optimize sequential read and write */
-    /* // for the latter, last_block also works, but only when appending */
-    /* block_idx recently_used_block = 0; */
+    size_t file_offset;
+    size_t file_size;
 
-    /* block_idx recently_used_indir_block = 0; */
-    /* uint8_t next_indir_entry = 0; */
+    block_idx file_meta_block;
+    block_idx last_data_block;
+    size_t last_data_block_fill;
 
+    block_idx last_indir_block;
+    uint32_t next_indir_entry_idx;
+
+#if R2F2_USE_WRITE_BUFFER
     struct {
         size_t count;
+        /* TODO: should be malloc'ed on mount */
         uint8_t data[BLOCK_SIZE];
     } block_buffer;
-} fds[MAX_NUM_FDS];
+#endif
+} fildes_t;
+
+fildes_t fds[MAX_NUM_FDS];
 
 #ifdef __cplusplus
 extern "C" {
@@ -47,13 +48,22 @@ RESULT(block_idx) r2f2_find_file_meta_block(r2f2_fs_t *fs, const char *path);
  * creates the in-flash metadata for a file. the directory the file resides in
  * must already exist
  */
-r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path);
+r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path, r2f2_fd fd);
 
 /**
  * create an in-RAM file descriptor
  */
 RESULT(r2f2_fd) r2f2_create_fd(r2f2_fs_t *fs, const char *path);
 r2f2_ret r2f2_fd_valid(r2f2_fs_t *fs, r2f2_fd fd);
+
+#define R2F2_FD_VALID_CHECK(fs, fd)                                            \
+    do {                                                                       \
+        r2f2_ret ret = r2f2_fd_valid(fs, fd);                                  \
+        if (ret != RET_OK) {                                                   \
+            R2F2_LOG_ERR("invalid (%d) fd %d", ret, fd);                       \
+            return ret;                                                        \
+        }                                                                      \
+    } while (0)
 
 #ifdef __cplusplus
 }
