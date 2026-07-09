@@ -142,6 +142,32 @@ r2f2_ret r2f2_close(r2f2_fs_t *fs, r2f2_fd fd) {
     return RET_OK;
 }
 
+r2f2_ret r2f2_lseek(r2f2_fs_t *fs, r2f2_fd fd, off_t offset, int whence) {
+    R2F2_FD_VALID_CHECK(fs, fd);
+
+    fildes_t *f = &fs->fds[fd];
+
+    off_t new_offset = -1;
+
+    if (whence == SEEK_SET) {
+        new_offset = offset;
+    } else if (whence == SEEK_CUR) {
+        new_offset = f->file_offset + offset;
+    } else if (whence == SEEK_END) {
+        new_offset = f->file_size + offset;
+    } else {
+        return RET_EINVAL;
+    }
+
+    if (new_offset < 0) {
+        return RET_OOB;
+    }
+
+    f->file_offset = new_offset;
+
+    return RET_OK;
+}
+
 r2f2_ret r2f2_read(r2f2_fs_t *fs, int fd, void *buf, size_t count) {
     R2F2_FD_VALID_CHECK(fs, fd);
 
