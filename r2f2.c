@@ -136,6 +136,8 @@ r2f2_ret r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
 r2f2_ret r2f2_close(r2f2_fs_t *fs, r2f2_fd fd) {
     R2F2_FD_VALID_CHECK(fs, fd);
 
+    r2f2_fsync(fs, fd);
+
     fs->fds[fd].active = false;
     return RET_OK;
 }
