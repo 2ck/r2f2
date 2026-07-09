@@ -278,23 +278,41 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
         return RET_OK;
     }
 
-    if (f->last_data_block_fill + f->block_buffer.count <=
-        fs->cfg->geom.block_size) {
-        r2f2_ret ret =
-            fs->cfg->flash_write(fs,
-                                 f->last_data_block * fs->cfg->geom.block_size +
-                                     f->last_data_block_fill,
-                                 f->block_buffer.count, f->block_buffer.data);
+    size_t total_written = 0;
+    while (total_written < f->block_buffer.count) {
+        size_t last_data_block_cap =
+            fs->cfg->geom.block_size - f->last_data_block_fill;
+
+        if (last_data_block_cap == 0) {
+            RESULT(block_idx) b = allocate_block(fs);
+            if (b.code != RET_OK) {
+                return b.code;
+            }
+
+            f->last_data_block = b.value;
+            f->last_data_block_fill = 0;
+            last_data_block_cap = fs->cfg->geom.block_size;
+        }
+
+        size_t to_write = MIN(f->block_buffer.count, last_data_block_cap);
+
+        R2F2_ASSERT(total_written + to_write, <=, fs->cfg->geom.block_size,
+                    "%zu");
+        r2f2_ret ret = fs->cfg->flash_write(
+            fs,
+            f->last_data_block * fs->cfg->geom.block_size +
+                f->last_data_block_fill,
+            to_write, f->block_buffer.data + total_written);
         if (ret != RET_OK) {
             R2F2_LOG_ERR("failed (%d) to write %zu B to flash in block %u", ret,
-                         f->block_buffer.count, f->last_data_block);
+                         to_write, f->last_data_block);
             return ret;
         }
 
         /* update file information in fd and "empty" its block buffer */
-        f->last_data_block_fill += f->block_buffer.count;
-        f->file_size += f->block_buffer.count;
-        f->block_buffer.count = 0;
+        f->last_data_block_fill += to_write;
+        f->file_size += to_write;
+        f->block_buffer.count -= to_write;
 
         /* we've written our data, time for the necessary metadata */
 
@@ -308,7 +326,6 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
 
         fie.data_block = f->last_data_block;
         fie.data_block_fill_level = f->last_data_block_fill;
-        fie.data_block_offset_in_file = 0;
         R2F2_ASSERT(f->file_size, >, 0, "%zu");
         fie.data_block_offset_in_file =
             fs->cfg->geom.block_size *
@@ -324,9 +341,10 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
         write_file_indir_entry_flags(fs, f->last_indir_block,
                                      f->next_indir_entry_idx, &fie.f);
 
-        return RET_OK;
-    } else {
-        R2F2_LOG_ERR("unimplemented (for now)!");
-        return RET_ERR;
+        f->next_indir_entry_idx++;
+
+        total_written += to_write;
     }
+
+    return RET_OK;
 }

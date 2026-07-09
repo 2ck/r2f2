@@ -381,6 +381,10 @@ RESULT(uint32_t) find_data_block_for_off(r2f2_fs_t *fs,
      * For sequential writes, the first indir_entry is for file creation.
      * Each subsequent 4096B are one data block aka indir_entry further, so
      * 128*4096B is one indir_block aka one meta_entry further.
+     *
+     * In case we have fsynced after writing < 4096B, we have more metadata
+     * entries than expected, so we may need to search ahead from our expected
+     * entries.
      */
 
     size_t expected_meta_entry =
@@ -391,23 +395,46 @@ RESULT(uint32_t) find_data_block_for_off(r2f2_fs_t *fs,
          (fs->cfg->geom.block_size * (NUM_FILE_INDIR_ENTRIES))) /
         fs->cfg->geom.block_size;
 
-    file_meta_entry_t fme;
-    read_file_meta_entry(fs, file_meta_block_idx, expected_meta_entry, &fme);
-    if (is_entry_used(fme.f) && is_entry_committed(fme.f)) {
-        file_indir_entry_t fie;
-        read_file_indir_entry(fs, fme.indir_block, expected_indir_entry, &fie);
-        if (is_entry_used(fie.f) && is_entry_committed(fie.f)) {
-            if (fie.data_block_offset_in_file == off ||
-                (fie.data_block_offset_in_file <= off &&
-                 fie.data_block_offset_in_file + fie.data_block_fill_level >=
-                     off)) {
-                return RESULT_OK(uint32_t, fie.data_block);
+    size_t start_from_meta_entry = expected_meta_entry;
+    size_t start_from_indir_entry = expected_indir_entry;
+
+    for (size_t i = start_from_meta_entry; i < NUM_FILE_META_ENTRIES; i++) {
+        file_meta_entry_t fme;
+        read_file_meta_entry(fs, file_meta_block_idx, i, &fme);
+        if (is_entry_used(fme.f) && is_entry_committed(fme.f)) {
+            /* check the expected and subsequent indir entries */
+            for (size_t j = start_from_indir_entry; j < NUM_FILE_INDIR_ENTRIES;
+                 j++) {
+                file_indir_entry_t fie;
+                read_file_indir_entry(fs, fme.indir_block, j, &fie);
+                if (is_entry_used(fie.f) && is_entry_committed(fie.f)) {
+                    /* R2F2_LOG_DEBUG( */
+                    /*     "looking for offset %zu, block covers range %u - %u",
+                     */
+                    /*     off, fie.data_block_offset_in_file, */
+                    /*     fie.data_block_offset_in_file + */
+                    /*         fie.data_block_fill_level); */
+                    if (fie.data_block_offset_in_file == off ||
+                        (fie.data_block_offset_in_file <= off &&
+                         fie.data_block_offset_in_file +
+                                 fie.data_block_fill_level >=
+                             off)) {
+                        return RESULT_OK(uint32_t, fie.data_block);
+                    }
+                }
             }
         }
+        /*
+         * after the first indir_block, we search the next one starting from
+         * entry 0, because the expected entry was only valid for the
+         * previous block
+         */
+        start_from_indir_entry = 0;
     }
 
     R2F2_LOG_ERR(
-        "expected meta_entry %zu or expected indir_entry %zu not correct",
+        "expected meta_entry %zu or expected indir_entry %zu not correct, and "
+        "could not find correct entries",
         expected_meta_entry, expected_indir_entry);
     return RESULT_ERR(uint32_t, RET_NOT_FOUND);
 }
