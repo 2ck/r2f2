@@ -1,10 +1,9 @@
 #pragma once
 
-#include "r2f2.h"
 #include "r2f2_defines.h"
 #include <stdbool.h>
 
-typedef struct fildes {
+struct fildes {
     char path[MAX_PATH_LEN];
     bool active;
 
@@ -25,9 +24,7 @@ typedef struct fildes {
         uint8_t data[BLOCK_SIZE];
     } block_buffer;
 #endif
-} fildes_t;
-
-fildes_t fds[MAX_NUM_FDS];
+};
 
 #ifdef __cplusplus
 extern "C" {

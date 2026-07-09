@@ -121,7 +121,7 @@ r2f2_ret r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
             return ret;
         }
 
-        fildes_t *f = &fds[fd.value];
+        fildes_t *f = &fs->fds[fd.value];
         f->file_offset = 0;
         f->file_size = fie.current_file_size;
         f->file_meta_block = fmb_ret.value;
@@ -136,7 +136,7 @@ r2f2_ret r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
 r2f2_ret r2f2_close(r2f2_fs_t *fs, r2f2_fd fd) {
     R2F2_FD_VALID_CHECK(fs, fd);
 
-    fds[fd].active = false;
+    fs->fds[fd].active = false;
     return RET_OK;
 }
 
@@ -147,7 +147,7 @@ r2f2_ret r2f2_read(r2f2_fs_t *fs, int fd, void *buf, size_t count) {
         return RET_EINVAL;
     }
 
-    fildes_t *f = &fds[fd];
+    fildes_t *f = &fs->fds[fd];
 
     /* sanity check if this read is possible */
     if (f->file_offset + count > f->file_size + f->block_buffer.count) {
@@ -195,6 +195,8 @@ r2f2_ret r2f2_write(r2f2_fs_t *fs, r2f2_fd fd, const void *buf, size_t count) {
         return RET_EINVAL;
     }
 
+    fildes_t *f = &fs->fds[fd];
+
 #if R2F2_USE_WRITE_BUFFER
     /*
      * Is there space in our fd's block buffer?
@@ -205,30 +207,29 @@ r2f2_ret r2f2_write(r2f2_fs_t *fs, r2f2_fd fd, const void *buf, size_t count) {
 
     size_t total_written = 0;
     while (total_written < count) {
-        if (fds[fd].block_buffer.count == fs->cfg->geom.block_size) {
+        if (f->block_buffer.count == fs->cfg->geom.block_size) {
             r2f2_ret ret = r2f2_fsync(fs, fd);
             if (ret != RET_OK) {
                 return ret;
             }
 
             /* fsync has reset our block_buffer count to 0 */
-            R2F2_ASSERT(fds[fd].block_buffer.count, ==, 0, "%zu");
+            R2F2_ASSERT(f->block_buffer.count, ==, 0, "%zu");
         }
 
         size_t remaining_in_fd_buf =
-            fs->cfg->geom.block_size - fds[fd].block_buffer.count;
+            fs->cfg->geom.block_size - f->block_buffer.count;
         size_t remaining = count - total_written;
         size_t to_write = MIN(remaining_in_fd_buf, remaining);
 
         R2F2_ASSERT(to_write, >, 0, "%zu");
 
         /* write leftover data into the block buffer */
-        uint8_t *write_pos =
-            fds[fd].block_buffer.data + fds[fd].block_buffer.count;
+        uint8_t *write_pos = f->block_buffer.data + f->block_buffer.count;
         const uint8_t *src_pos = (const uint8_t *)buf + total_written;
         memcpy(write_pos, src_pos, to_write);
 
-        fds[fd].block_buffer.count += to_write;
+        f->block_buffer.count += to_write;
         total_written += to_write;
     }
     return RET_OK;
@@ -240,7 +241,7 @@ r2f2_ret r2f2_write(r2f2_fs_t *fs, r2f2_fd fd, const void *buf, size_t count) {
 r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
     R2F2_FD_VALID_CHECK(fs, fd);
 
-    fildes_t *f = &fds[fd];
+    fildes_t *f = &fs->fds[fd];
     if (f->block_buffer.count == 0) {
         return RET_OK;
     }

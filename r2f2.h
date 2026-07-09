@@ -1,9 +1,7 @@
 #pragma once
 
 #include "r2f2_defines.h"
-
-typedef struct r2f2_fs r2f2_fs_t;
-typedef struct r2f2_cfg r2f2_cfg_t;
+#include "r2f2_file.h"
 
 struct r2f2_cfg {
     void *user_ctx;
@@ -27,6 +25,7 @@ struct r2f2_cfg {
 struct r2f2_fs {
     r2f2_cfg_t *cfg;
     block_idx root_dir_block;
+    fildes_t fds[MAX_NUM_FDS];
 };
 
 #ifdef __cplusplus

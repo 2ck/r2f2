@@ -246,7 +246,7 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path, r2f2_fd fd) {
         return ret;
     }
 
-    fildes_t *f = &fds[fd];
+    fildes_t *f = &fs->fds[fd];
     f->file_offset = 0;
     f->file_size = 0;
     f->file_meta_block = file_meta_block_idx.value;
@@ -259,25 +259,23 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path, r2f2_fd fd) {
 }
 
 RESULT(r2f2_fd) r2f2_create_fd(r2f2_fs_t *fs, const char *path) {
-    (void)fs;
     for (size_t i = 0; i < MAX_NUM_FDS; i++) {
-        if (fds[i].active) {
+        if (fs->fds[i].active) {
             continue;
         }
-        fds[i].active = true;
-        memcpy(fds[i].path, path, MAX_PATH_LEN);
+        fs->fds[i].active = true;
+        memcpy(fs->fds[i].path, path, MAX_PATH_LEN);
         return RESULT_OK(r2f2_fd, i);
     }
     return RESULT_ERR(r2f2_fd, RET_NOMEM);
 }
 
 r2f2_ret r2f2_fd_valid(r2f2_fs_t *fs, r2f2_fd fd) {
-    (void)fs;
     if (fd < 0 || fd >= MAX_NUM_FDS) {
         R2F2_LOG_ERR("Out-of-bounds fd %d", fd);
         return RET_OOB;
     }
-    if (fds[fd].active != true) {
+    if (fs->fds[fd].active != true) {
         R2F2_LOG_ERR("file descriptor %d did not exist", fd);
         return RET_ERR;
     }

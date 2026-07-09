@@ -18,6 +18,10 @@
 #  define R2F2_USE_WRITE_BUFFER 1
 #endif
 
+typedef struct r2f2_fs r2f2_fs_t;
+typedef struct r2f2_cfg r2f2_cfg_t;
+typedef struct fildes fildes_t;
+
 typedef uint32_t block_idx;
 typedef uint32_t r2f2_fd;
 
