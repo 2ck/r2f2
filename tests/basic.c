@@ -115,11 +115,12 @@ int main(int argc, char **argv) {
     }
 
     const char *write_buf = "Here we have some test data to be written.";
+    size_t write_len = strlen(write_buf) + 1;
     /* write */
     {
         const char *filename = "/testfile";
-        int ret = r2f2_write(&fs, fd, write_buf, strlen(write_buf) + 1);
-        if (ret != RET_OK) {
+        int ret = r2f2_write(&fs, fd, write_buf, write_len);
+        if (ret != write_len) {
             printf("R2F2 write '%s' to file '%s' failed (%d)\n", write_buf,
                    filename, ret);
             return ret;
@@ -142,10 +143,10 @@ int main(int argc, char **argv) {
     /* read back */
     {
         const char *filename = "/testfile";
-        uint8_t read_buf[FLASH_PAGE_SIZE];
+        uint8_t read_buf[write_len];
         memset(read_buf, 0, sizeof(read_buf));
-        int ret = r2f2_read(&fs, fd, read_buf, strlen(write_buf) + 1);
-        if (ret != RET_OK) {
+        int ret = r2f2_read(&fs, fd, read_buf, write_len);
+        if (ret != write_len) {
             printf("R2F2 read %zu B from file '%s' failed (%d)\n",
                    strlen(write_buf) + 1, filename, ret);
             return ret;

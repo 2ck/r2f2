@@ -54,7 +54,7 @@ r2f2_ret r2f2_mount(r2f2_fs_t *fs) {
     return RET_OK;
 }
 
-r2f2_ret r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
+r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
     bool creat = oflag & O_CREAT;
 
     if (!path) {
@@ -142,7 +142,7 @@ r2f2_ret r2f2_close(r2f2_fs_t *fs, r2f2_fd fd) {
     return RET_OK;
 }
 
-r2f2_ret r2f2_lseek(r2f2_fs_t *fs, r2f2_fd fd, off_t offset, int whence) {
+off_t r2f2_lseek(r2f2_fs_t *fs, r2f2_fd fd, off_t offset, int whence) {
     R2F2_FD_VALID_CHECK(fs, fd);
 
     fildes_t *f = &fs->fds[fd];
@@ -165,10 +165,10 @@ r2f2_ret r2f2_lseek(r2f2_fs_t *fs, r2f2_fd fd, off_t offset, int whence) {
 
     f->file_offset = new_offset;
 
-    return RET_OK;
+    return new_offset;
 }
 
-r2f2_ret r2f2_read(r2f2_fs_t *fs, int fd, void *buf, size_t count) {
+ssize_t r2f2_read(r2f2_fs_t *fs, r2f2_fd fd, void *buf, size_t count) {
     R2F2_FD_VALID_CHECK(fs, fd);
 
     if (!buf) {
@@ -205,7 +205,11 @@ r2f2_ret r2f2_read(r2f2_fs_t *fs, int fd, void *buf, size_t count) {
                                 b.value * fs->cfg->geom.block_size +
                                     (f->file_offset % fs->cfg->geom.block_size),
                                 count, buf);
-        return ret;
+        if (ret == RET_OK) {
+            return count;
+        } else {
+            return ret;
+        }
     } else {
         size_t to_read_from_fd_buf = count - can_read_from_storage;
         R2F2_LOG_ERR("have to read %zu B from fd buf", to_read_from_fd_buf);
@@ -216,7 +220,7 @@ r2f2_ret r2f2_read(r2f2_fs_t *fs, int fd, void *buf, size_t count) {
     return RET_ERR;
 }
 
-r2f2_ret r2f2_write(r2f2_fs_t *fs, r2f2_fd fd, const void *buf, size_t count) {
+ssize_t r2f2_write(r2f2_fs_t *fs, r2f2_fd fd, const void *buf, size_t count) {
     R2F2_FD_VALID_CHECK(fs, fd);
 
     if (!buf) {
@@ -260,7 +264,7 @@ r2f2_ret r2f2_write(r2f2_fs_t *fs, r2f2_fd fd, const void *buf, size_t count) {
         f->block_buffer.count += to_write;
         total_written += to_write;
     }
-    return RET_OK;
+    return total_written;
 #endif
 
     return RET_ERR;
