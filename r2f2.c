@@ -317,8 +317,12 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
         /* we've written our data, time for the necessary metadata */
 
         if (f->next_indir_entry_idx >= NUM_FILE_INDIR_ENTRIES) {
-            R2F2_LOG_ERR("unimplemented: need new indir_block");
-            return RET_NOMEM;
+            RESULT(block_idx) b = allocate_block(fs);
+            if (b.code != RET_OK) {
+                return b.code;
+            }
+            f->last_indir_block = b.value;
+            f->next_indir_entry_idx = 0;
         }
 
         file_indir_entry_t fie;
