@@ -111,7 +111,7 @@ RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path) {
     return RESULT_OK(block_idx, current_block);
 }
 
-RESULT(block_idx) r2f2_find_file_meta_block(r2f2_fs_t *fs, const char *path) {
+RESULT(block_idx) r2f2_find_file_indir_block(r2f2_fs_t *fs, const char *path) {
     RESULT(block_idx) ret = r2f2_find_dir_meta_block(fs, path);
     if (ret.code != RET_OK) {
         R2F2_LOG_ERR("traversal to dir_meta_block failed (%d) for path '%s'",
@@ -119,7 +119,7 @@ RESULT(block_idx) r2f2_find_file_meta_block(r2f2_fs_t *fs, const char *path) {
         return ret;
     }
 
-    block_idx file_dir_block_idx = ret.value;
+    block_idx dir_meta_block_idx = ret.value;
 
     char file_basename[MAX_PATH_LEN];
     memset(file_basename, 0, MAX_PATH_LEN);
@@ -136,7 +136,7 @@ RESULT(block_idx) r2f2_find_file_meta_block(r2f2_fs_t *fs, const char *path) {
 
     dir_meta_entry_t dme;
     for (size_t i = 0; i < NUM_DIR_META_ENTRIES; i++) {
-        read_dir_meta_entry(fs, file_dir_block_idx, i, &dme);
+        read_dir_meta_entry(fs, dir_meta_block_idx, i, &dme);
         if (memcmp(dme.path, file_basename, MAX_PATH_LEN) == 0) {
             return RESULT_OK(block_idx, dme.next_block);
         }
@@ -163,8 +163,8 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path, r2f2_fd fd) {
     }
 
     /*
-     * we allocate a data block, which is pointed to by an indir entry,
-     * in a block which in turn is pointed to by a file meta entry, in a block
+     * we allocate a data block, which is pointed to by a file_meta_entry,
+     * in a block which in turn is pointed to by a file_indir_entry, in a block
      * which is finally pointed to by the dir entry
      */
 
@@ -173,32 +173,32 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path, r2f2_fd fd) {
         return data_block_idx.code;
     }
 
-    file_indir_entry_t fie;
-    fie.data_block = data_block_idx.value;
-    fie.data_block_fill_level = 0;
-    fie.data_block_offset_in_file = 0;
-    fie.current_file_size = 0;
-    mark_entry_used(&fie.f);
-
-    RESULT(block_idx) file_indir_block_idx = allocate_block(fs);
-    if (file_indir_block_idx.code != RET_OK) {
-        return file_indir_block_idx.code;
-    }
-    r2f2_ret ret =
-        write_file_indir_entry(fs, file_indir_block_idx.value, 0, &fie);
-    if (ret != RET_OK) {
-        return ret;
-    }
-
     file_meta_entry_t fme;
-    fme.indir_block = file_indir_block_idx.value;
+    fme.data_block = data_block_idx.value;
+    fme.data_block_fill_level = 0;
+    fme.data_block_offset_in_file = 0;
+    fme.current_file_size = 0;
     mark_entry_used(&fme.f);
 
     RESULT(block_idx) file_meta_block_idx = allocate_block(fs);
     if (file_meta_block_idx.code != RET_OK) {
         return file_meta_block_idx.code;
     }
-    ret = write_file_meta_entry(fs, file_meta_block_idx.value, 0, &fme);
+    r2f2_ret ret =
+        write_file_meta_entry(fs, file_meta_block_idx.value, 0, &fme);
+    if (ret != RET_OK) {
+        return ret;
+    }
+
+    file_indir_entry_t fie;
+    fie.meta_block = file_meta_block_idx.value;
+    mark_entry_used(&fie.f);
+
+    RESULT(block_idx) file_indir_block_idx = allocate_block(fs);
+    if (file_indir_block_idx.code != RET_OK) {
+        return file_indir_block_idx.code;
+    }
+    ret = write_file_indir_entry(fs, file_indir_block_idx.value, 0, &fie);
     if (ret != RET_OK) {
         return ret;
     }
@@ -218,7 +218,7 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path, r2f2_fd fd) {
      */
     memcpy(dme.path, b, strlen(b) + 1);
 
-    dme.next_block = file_meta_block_idx.value;
+    dme.next_block = file_indir_block_idx.value;
 
     mark_entry_used(&dme.f);
 
@@ -229,14 +229,14 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path, r2f2_fd fd) {
     }
 
     /* commit, starting from the leaf to the root */
-    mark_entry_committed(&fie.f);
-    ret =
-        write_file_indir_entry_flags(fs, file_indir_block_idx.value, 0, &fie.f);
+    mark_entry_committed(&fme.f);
+    ret = write_file_meta_entry_flags(fs, file_meta_block_idx.value, 0, &fme.f);
     if (ret != RET_OK) {
         return ret;
     }
-    mark_entry_committed(&fme.f);
-    ret = write_file_meta_entry_flags(fs, file_meta_block_idx.value, 0, &fme.f);
+    mark_entry_committed(&fie.f);
+    ret =
+        write_file_indir_entry_flags(fs, file_indir_block_idx.value, 0, &fie.f);
     if (ret != RET_OK) {
         return ret;
     }
@@ -249,11 +249,11 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path, r2f2_fd fd) {
     fildes_t *f = &fs->fds[fd];
     f->file_offset = 0;
     f->file_size = 0;
-    f->file_meta_block = file_meta_block_idx.value;
+    f->file_indir_block = file_indir_block_idx.value;
+    f->last_meta_block = file_meta_block_idx.value;
+    f->next_meta_entry_idx = 1;
     f->last_data_block = data_block_idx.value;
     f->last_data_block_fill = 0;
-    f->last_indir_block = file_indir_block_idx.value;
-    f->next_indir_entry_idx = 1;
 
     return RET_OK;
 }

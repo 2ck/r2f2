@@ -10,12 +10,13 @@ struct fildes {
     size_t file_offset;
     size_t file_size;
 
-    block_idx file_meta_block;
+    block_idx file_indir_block;
+
+    block_idx last_meta_block;
+    uint32_t next_meta_entry_idx;
+
     block_idx last_data_block;
     size_t last_data_block_fill;
-
-    block_idx last_indir_block;
-    uint32_t next_indir_entry_idx;
 
 #if R2F2_USE_WRITE_BUFFER
     struct {
@@ -36,10 +37,10 @@ extern "C" {
  */
 RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path);
 /**
- * returns the file's first file_meta_block as pointed to by the dir_meta_entry,
- * or a FILE_NOT_FOUND error in case no matching entry was found
+ * returns the file's first file_indir_block as pointed to by the
+ * dir_meta_entry, or a FILE_NOT_FOUND error in case no matching entry was found
  */
-RESULT(block_idx) r2f2_find_file_meta_block(r2f2_fs_t *fs, const char *path);
+RESULT(block_idx) r2f2_find_file_indir_block(r2f2_fs_t *fs, const char *path);
 
 /**
  * creates the in-flash metadata for a file. the directory the file resides in

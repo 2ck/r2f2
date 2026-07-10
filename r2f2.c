@@ -74,8 +74,8 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
      * otherwise, error
      */
 
-    RESULT(block_idx) fmb_ret = r2f2_find_file_meta_block(fs, path);
-    if (fmb_ret.code == RET_FILE_NOT_FOUND) {
+    RESULT(block_idx) fib_ret = r2f2_find_file_indir_block(fs, path);
+    if (fib_ret.code == RET_FILE_NOT_FOUND) {
         if (creat) {
             r2f2_ret ret = r2f2_register_file(fs, path, fd.code);
             if (ret != RET_OK) {
@@ -87,48 +87,49 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
                          creat ? "y" : "n");
             return RET_ERR;
         }
-    } else if (fmb_ret.code != RET_OK) {
-        return fmb_ret.code;
+    } else if (fib_ret.code != RET_OK) {
+        return fib_ret.code;
     }
 
     if (!creat) {
         /*
-         * Our file already existed, so the last indir_entry contains the
+         * Our file already existed, so the last meta_entry contains the
          * information we need
          */
 
-        RESULT(uint32_t) last_fme = get_last_file_meta_entry(fs, fmb_ret.value);
-        if (last_fme.code != RET_OK) {
-            return last_fme.code;
-        }
-
-        file_meta_entry_t fme;
-        r2f2_ret ret =
-            read_file_meta_entry(fs, fmb_ret.value, last_fme.value, &fme);
-        if (ret != RET_OK) {
-            return ret;
-        }
-
         RESULT(uint32_t) last_fie =
-            get_last_file_indir_entry(fs, fme.indir_block);
+            get_last_file_indir_entry(fs, fib_ret.value);
         if (last_fie.code != RET_OK) {
             return last_fie.code;
         }
 
         file_indir_entry_t fie;
-        ret = read_file_indir_entry(fs, fme.indir_block, last_fie.value, &fie);
+        r2f2_ret ret =
+            read_file_indir_entry(fs, fib_ret.value, last_fie.value, &fie);
+        if (ret != RET_OK) {
+            return ret;
+        }
+
+        RESULT(uint32_t) last_fme =
+            get_last_file_meta_entry(fs, fie.meta_block);
+        if (last_fme.code != RET_OK) {
+            return last_fme.code;
+        }
+
+        file_meta_entry_t fme;
+        ret = read_file_meta_entry(fs, fie.meta_block, last_fme.value, &fme);
         if (ret != RET_OK) {
             return ret;
         }
 
         fildes_t *f = &fs->fds[fd.value];
         f->file_offset = 0;
-        f->file_size = fie.current_file_size;
-        f->file_meta_block = fmb_ret.value;
-        f->last_data_block = fie.data_block;
-        f->last_data_block_fill = fie.data_block_fill_level;
-        f->last_indir_block = fme.indir_block;
-        f->next_indir_entry_idx = last_fie.value + 1;
+        f->file_size = fme.current_file_size;
+        f->file_indir_block = fib_ret.value;
+        f->last_meta_block = fie.meta_block;
+        f->next_meta_entry_idx = last_fme.value + 1;
+        f->last_data_block = fme.data_block;
+        f->last_data_block_fill = fme.data_block_fill_level;
     }
     return fd.value;
 }
@@ -195,7 +196,7 @@ ssize_t r2f2_read(r2f2_fs_t *fs, r2f2_fd fd, void *buf, size_t count) {
     if (can_read_from_storage >= count) {
         /* we have to find the appropriate data block to read from */
         RESULT(uint32_t) b =
-            find_data_block_for_off(fs, f->file_meta_block, f->file_offset);
+            find_data_block_for_off(fs, f->file_indir_block, f->file_offset);
         if (b.code != RET_OK) {
             return b.code;
         }
@@ -316,36 +317,36 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
 
         /* we've written our data, time for the necessary metadata */
 
-        if (f->next_indir_entry_idx >= NUM_FILE_INDIR_ENTRIES) {
+        if (f->next_meta_entry_idx >= NUM_FILE_META_ENTRIES) {
             RESULT(block_idx) b = allocate_block(fs);
             if (b.code != RET_OK) {
                 return b.code;
             }
-            f->last_indir_block = b.value;
-            f->next_indir_entry_idx = 0;
+            f->last_meta_block = b.value;
+            f->next_meta_entry_idx = 0;
         }
 
-        file_indir_entry_t fie;
-        memset(&fie, 0xFF, sizeof(file_indir_entry_t));
+        file_meta_entry_t fme;
+        memset(&fme, 0xFF, sizeof(file_meta_entry_t));
 
-        fie.data_block = f->last_data_block;
-        fie.data_block_fill_level = f->last_data_block_fill;
+        fme.data_block = f->last_data_block;
+        fme.data_block_fill_level = f->last_data_block_fill;
         R2F2_ASSERT(f->file_size, >, 0, "%zu");
-        fie.data_block_offset_in_file =
+        fme.data_block_offset_in_file =
             fs->cfg->geom.block_size *
             ((f->file_size - 1) / fs->cfg->geom.block_size);
-        fie.current_file_size = f->file_size;
-        mark_entry_used(&fie.f);
+        fme.current_file_size = f->file_size;
+        mark_entry_used(&fme.f);
 
         /* write the entry, then persist via flags */
-        write_file_indir_entry(fs, f->last_indir_block, f->next_indir_entry_idx,
-                               &fie);
+        write_file_meta_entry(fs, f->last_meta_block, f->next_meta_entry_idx,
+                              &fme);
 
-        mark_entry_committed(&fie.f);
-        write_file_indir_entry_flags(fs, f->last_indir_block,
-                                     f->next_indir_entry_idx, &fie.f);
+        mark_entry_committed(&fme.f);
+        write_file_meta_entry_flags(fs, f->last_meta_block,
+                                    f->next_meta_entry_idx, &fme.f);
 
-        f->next_indir_entry_idx++;
+        f->next_meta_entry_idx++;
 
         total_written += to_write;
     }

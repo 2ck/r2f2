@@ -58,26 +58,26 @@ typedef struct dir_meta_block {
 } dir_meta_block_t;
 STATIC_ASSERT(sizeof(struct dir_meta_block) == BLOCK_SIZE);
 
-typedef struct __attribute__((packed)) file_meta_entry {
+typedef struct __attribute__((packed)) file_indir_entry {
     entry_flags_t f;
 
     uint8_t padding[8];
 
-    block_idx indir_block;
-} file_meta_entry_t;
+    block_idx meta_block;
+} file_indir_entry_t;
 
-typedef struct __attribute__((packed)) file_meta_block {
+typedef struct __attribute__((packed)) file_indir_block {
     char path[MAX_PATH_LEN];
 
-    struct file_meta_entry entries[NUM_FILE_META_ENTRIES];
+    struct file_indir_entry entries[NUM_FILE_INDIR_ENTRIES];
 
     uint8_t padding[641];
 
     block_idx next_block;
-} file_meta_block_t;
-STATIC_ASSERT(sizeof(struct file_meta_block) == BLOCK_SIZE);
+} file_indir_block_t;
+STATIC_ASSERT(sizeof(struct file_indir_block) == BLOCK_SIZE);
 
-typedef struct __attribute__((packed)) file_indir_entry {
+typedef struct __attribute__((packed)) file_meta_entry {
     entry_flags_t f;
 
     block_idx data_block;
@@ -88,12 +88,12 @@ typedef struct __attribute__((packed)) file_indir_entry {
     uint32_t current_file_size;
 
     uint8_t padding[17];
-} file_indir_entry_t;
+} file_meta_entry_t;
 
-typedef struct __attribute__((packed)) file_indir_block {
-    struct file_indir_entry entries[NUM_FILE_INDIR_ENTRIES];
-} file_indir_block_t;
-STATIC_ASSERT(sizeof(struct file_indir_block) == BLOCK_SIZE);
+typedef struct __attribute__((packed)) file_meta_block {
+    struct file_meta_entry entries[NUM_FILE_META_ENTRIES];
+} file_meta_block_t;
+STATIC_ASSERT(sizeof(struct file_meta_block) == BLOCK_SIZE);
 
 #ifdef __cplusplus
 extern "C" {
@@ -113,15 +113,6 @@ r2f2_ret write_dir_meta_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
 r2f2_ret write_dir_meta_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
                                     void *buf);
 
-r2f2_ret read_file_meta_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                              void *buf);
-r2f2_ret write_file_meta_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                               void *buf);
-r2f2_ret read_file_meta_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                                    void *buf);
-r2f2_ret write_file_meta_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                                     void *buf);
-
 r2f2_ret read_file_indir_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
                                void *buf);
 r2f2_ret write_file_indir_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
@@ -131,23 +122,32 @@ r2f2_ret read_file_indir_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
 r2f2_ret write_file_indir_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
                                       void *buf);
 
+r2f2_ret read_file_meta_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
+                              void *buf);
+r2f2_ret write_file_meta_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
+                               void *buf);
+r2f2_ret read_file_meta_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
+                                    void *buf);
+r2f2_ret write_file_meta_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
+                                     void *buf);
+
 bool is_fs_valid(r2f2_fs_t *fs, r2f2_fs_info_t *fs_info);
 
 RESULT(uint32_t) get_free_dir_meta_entry(r2f2_fs_t *fs,
                                          block_idx dir_block_idx);
-RESULT(uint32_t) get_free_file_meta_entry(r2f2_fs_t *fs,
-                                          block_idx file_meta_block_idx);
 RESULT(uint32_t) get_free_file_indir_entry(r2f2_fs_t *fs,
                                            block_idx file_indir_block_idx);
-
-RESULT(uint32_t) get_last_file_meta_entry(r2f2_fs_t *fs,
-                                          block_idx file_indir_block_idx);
+RESULT(uint32_t) get_free_file_meta_entry(r2f2_fs_t *fs,
+                                          block_idx file_meta_block_idx);
 
 RESULT(uint32_t) get_last_file_indir_entry(r2f2_fs_t *fs,
                                            block_idx file_indir_block_idx);
 
+RESULT(uint32_t) get_last_file_meta_entry(r2f2_fs_t *fs,
+                                          block_idx file_meta_block_idx);
+
 RESULT(uint32_t) find_data_block_for_off(r2f2_fs_t *fs,
-                                         block_idx file_meta_block_idx,
+                                         block_idx file_indir_block_idx,
                                          size_t off);
 #ifdef __cplusplus
 }
