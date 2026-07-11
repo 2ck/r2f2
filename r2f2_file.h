@@ -12,8 +12,8 @@ struct fildes {
 
     block_idx file_indir_block;
 
-    block_idx last_meta_block;
-    uint32_t next_meta_entry_idx;
+    block_idx last_seq_block;
+    uint32_t next_seq_entry_idx;
 
     block_idx last_data_block;
     size_t last_data_block_fill;

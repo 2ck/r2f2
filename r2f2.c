@@ -93,7 +93,7 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
 
     if (!creat) {
         /*
-         * Our file already existed, so the last meta_entry contains the
+         * Our file already existed, so the last seq_entry contains the
          * information we need
          */
 
@@ -110,26 +110,25 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
             return ret;
         }
 
-        RESULT(uint32_t) last_fme =
-            get_last_file_meta_entry(fs, fie.meta_block);
-        if (last_fme.code != RET_OK) {
-            return last_fme.code;
+        RESULT(uint32_t) last_fse = get_last_file_seq_entry(fs, fie.seq_block);
+        if (last_fse.code != RET_OK) {
+            return last_fse.code;
         }
 
-        file_meta_entry_t fme;
-        ret = read_file_meta_entry(fs, fie.meta_block, last_fme.value, &fme);
+        file_seq_entry_t fse;
+        ret = read_file_seq_entry(fs, fie.seq_block, last_fse.value, &fse);
         if (ret != RET_OK) {
             return ret;
         }
 
         fildes_t *f = &fs->fds[fd.value];
         f->file_offset = 0;
-        f->file_size = fme.current_file_size;
+        f->file_size = fse.current_file_size;
         f->file_indir_block = fib_ret.value;
-        f->last_meta_block = fie.meta_block;
-        f->next_meta_entry_idx = last_fme.value + 1;
-        f->last_data_block = fme.data_block;
-        f->last_data_block_fill = fme.data_block_fill_level;
+        f->last_seq_block = fie.seq_block;
+        f->next_seq_entry_idx = last_fse.value + 1;
+        f->last_data_block = fse.data_block;
+        f->last_data_block_fill = fse.data_block_fill_level;
     }
     return fd.value;
 }
@@ -317,36 +316,36 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
 
         /* we've written our data, time for the necessary metadata */
 
-        if (f->next_meta_entry_idx >= NUM_FILE_META_ENTRIES) {
+        if (f->next_seq_entry_idx >= NUM_FILE_SEQ_ENTRIES) {
             RESULT(block_idx) b = allocate_block(fs);
             if (b.code != RET_OK) {
                 return b.code;
             }
-            f->last_meta_block = b.value;
-            f->next_meta_entry_idx = 0;
+            f->last_seq_block = b.value;
+            f->next_seq_entry_idx = 0;
         }
 
-        file_meta_entry_t fme;
-        memset(&fme, 0xFF, sizeof(file_meta_entry_t));
+        file_seq_entry_t fse;
+        memset(&fse, 0xFF, sizeof(file_seq_entry_t));
 
-        fme.data_block = f->last_data_block;
-        fme.data_block_fill_level = f->last_data_block_fill;
+        fse.data_block = f->last_data_block;
+        fse.data_block_fill_level = f->last_data_block_fill;
         R2F2_ASSERT(f->file_size, >, 0, "%zu");
-        fme.data_block_offset_in_file =
+        fse.data_block_offset_in_file =
             fs->cfg->geom.block_size *
             ((f->file_size - 1) / fs->cfg->geom.block_size);
-        fme.current_file_size = f->file_size;
-        mark_entry_used(&fme.f);
+        fse.current_file_size = f->file_size;
+        mark_entry_used(&fse.f);
 
         /* write the entry, then persist via flags */
-        write_file_meta_entry(fs, f->last_meta_block, f->next_meta_entry_idx,
-                              &fme);
+        write_file_seq_entry(fs, f->last_seq_block, f->next_seq_entry_idx,
+                             &fse);
 
-        mark_entry_committed(&fme.f);
-        write_file_meta_entry_flags(fs, f->last_meta_block,
-                                    f->next_meta_entry_idx, &fme.f);
+        mark_entry_committed(&fse.f);
+        write_file_seq_entry_flags(fs, f->last_seq_block, f->next_seq_entry_idx,
+                                   &fse.f);
 
-        f->next_meta_entry_idx++;
+        f->next_seq_entry_idx++;
 
         total_written += to_write;
     }
