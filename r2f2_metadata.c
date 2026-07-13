@@ -468,3 +468,96 @@ RESULT(uint32_t) find_data_block_for_off(r2f2_fs_t *fs,
         expected_indir_entry, expected_seq_entry);
     return RESULT_ERR(uint32_t, RET_NOT_FOUND);
 }
+
+void dump_file_seq_block(FILE *f, r2f2_fs_t *fs, block_idx file_indir_block,
+                         size_t file_indir_entry, block_idx file_seq_block) {
+    fprintf(f,
+            "\nfile_seq_block_%d [shape=record, fillcolor=\"#eadcf8\", "
+            "\nlabel=\"{file_seq_block %u | { ",
+            file_seq_block, file_seq_block);
+
+    file_seq_entry_t fse;
+    for (size_t i = 0; i < NUM_FILE_SEQ_ENTRIES; i++) {
+        read_file_seq_entry(fs, file_seq_block, i, &fse);
+        if (is_entry_used(fse.f) && is_entry_committed(fse.f)) {
+            fprintf(f, "{block %u | fill %u | offs %u | file size %u} | ",
+                    fse.data_block, fse.data_block_fill_level,
+                    fse.data_block_offset_in_file, fse.current_file_size);
+        }
+    }
+
+    fprintf(f, " }}\"\n];\n");
+
+    fprintf(f, "\nfile_indir_block_%u:e%zu -> file_seq_block_%u",
+            file_indir_block, file_indir_entry, file_seq_block);
+}
+
+void dump_file_indir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block,
+                           size_t dir_entry, block_idx file_indir_block) {
+    fprintf(f,
+            "\nfile_indir_block_%u [shape=record, fillcolor=\"#cfe2f3\", "
+            "\nlabel=\"{file_indir_block %u | { ",
+            file_indir_block, file_indir_block);
+
+    file_indir_entry_t fie;
+    for (size_t i = 0; i < NUM_FILE_INDIR_ENTRIES; i++) {
+        read_file_indir_entry(fs, file_indir_block, i, &fie);
+        if (is_entry_used(fie.f) && is_entry_committed(fie.f)) {
+            /* FIXME: hardcoded entry 0 */
+            fprintf(f, "<e%zu> %u | ", i, fie.seq_block[0]);
+        }
+    }
+
+    fprintf(f, " }}\"\n];\n");
+
+    fprintf(f, "\ndir_block_%u:e%zu -> file_indir_block_%u", dir_block,
+            dir_entry, file_indir_block);
+
+    for (size_t i = 0; i < NUM_FILE_INDIR_ENTRIES; i++) {
+        read_file_indir_entry(fs, file_indir_block, i, &fie);
+        if (is_entry_used(fie.f) && is_entry_committed(fie.f)) {
+            /* FIXME: hardcoded entry 0 */
+            dump_file_seq_block(f, fs, file_indir_block, i, fie.seq_block[0]);
+        }
+    }
+}
+
+void dump_dir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block) {
+    fprintf(f,
+            "\ndir_block_%d [shape=record, fillcolor=\"#ffe599\", "
+            "\nlabel=\"{dir_block %u | { ",
+            dir_block, dir_block);
+
+    dir_meta_entry_t dme;
+    for (size_t d = 0; d < NUM_DIR_META_ENTRIES; d++) {
+        read_dir_meta_entry(fs, dir_block, d, &dme);
+        if (is_entry_used(dme.f) && is_entry_committed(dme.f)) {
+            /* FIXME: hardcoded entry 0 */
+            fprintf(f, "{ %s | <e%zu> %u} | ", dme.path, d, dme.next_block[0]);
+        }
+    }
+
+    fprintf(f, " }}\"\n];\n");
+
+    for (size_t d = 0; d < NUM_DIR_META_ENTRIES; d++) {
+        read_dir_meta_entry(fs, dir_block, d, &dme);
+        if (is_entry_used(dme.f) && is_entry_committed(dme.f)) {
+            /* FIXME: hardcoded entry 0 */
+            dump_file_indir_block(f, fs, dir_block, d, dme.next_block[0]);
+        }
+    }
+}
+
+void dump_fs_dot(r2f2_fs_t *fs, const char *filename) {
+    FILE *f = fopen(filename, "w");
+    fprintf(f, "digraph r2f2 {\n");
+    fprintf(f, "graph [rankdir=TB, compound=true, labelloc=t, label=\"R2F2 "
+               "tree\"];\n");
+    fprintf(f, "node [style=\"filled\"];\n");
+
+    block_idx dir_block = fs->root_dir_block;
+
+    dump_dir_block(f, fs, dir_block);
+
+    fprintf(f, "}");
+}

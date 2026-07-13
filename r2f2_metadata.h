@@ -160,6 +160,8 @@ RESULT(uint32_t) get_last_file_seq_entry(r2f2_fs_t *fs,
 RESULT(uint32_t) find_data_block_for_off(r2f2_fs_t *fs,
                                          block_idx file_indir_block_idx,
                                          size_t off);
+
+void dump_fs_dot(r2f2_fs_t *fs, const char *filename);
 #ifdef __cplusplus
 }
 #endif
