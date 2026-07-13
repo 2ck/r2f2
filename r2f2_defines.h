@@ -6,16 +6,20 @@
 
 #define PAGE_SIZE (256U)
 #define BLOCK_SIZE (4096U)
-#define MAX_PATH_LEN (123U)
+#define MAX_PATH_LEN (118U)
 
 #define NUM_DIR_META_ENTRIES (32U)
-#define NUM_FILE_INDIR_ENTRIES (256U)
+#define NUM_FILE_INDIR_ENTRIES (384U)
 #define NUM_FILE_SEQ_ENTRIES (128U)
 
 #define MAX_NUM_FDS (32U)
 
 #ifndef R2F2_USE_WRITE_BUFFER
 #  define R2F2_USE_WRITE_BUFFER 1
+#endif
+
+#ifndef NUM_NEXT_PTRS
+#  define NUM_NEXT_PTRS 2
 #endif
 
 typedef struct r2f2_fs r2f2_fs_t;

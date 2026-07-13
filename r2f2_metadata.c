@@ -4,6 +4,32 @@
 #include <stddef.h>
 #include <string.h>
 
+RESULT(block_idx) get_valid_next_block(r2f2_fs_t *fs, block_idx *indices) {
+    if (!indices) {
+        return RESULT_ERR(block_idx, RET_EINVAL);
+    }
+
+    block_idx valid = 0;
+
+    for (size_t i = 0; i < NUM_NEXT_PTRS; i++) {
+        /* this entry was unused, so no more valid entry can come */
+        if (indices[i] >= fs->cfg->geom.num_blocks) {
+            break;
+        }
+
+        if (indices[i] == 0) {
+            continue;
+        }
+
+        valid = indices[i];
+    }
+    if (valid != 0) {
+        return RESULT_OK(block_idx, valid);
+    } else {
+        return RESULT_ERR(block_idx, RET_NOT_FOUND);
+    }
+}
+
 void mark_entry_committed(entry_flags_t *f) {
     *f &= ~ENTRY_COMMIT_MASK;
 }
@@ -405,7 +431,12 @@ RESULT(uint32_t) find_data_block_for_off(r2f2_fs_t *fs,
             for (size_t j = start_from_seq_entry; j < NUM_FILE_SEQ_ENTRIES;
                  j++) {
                 file_seq_entry_t fse;
-                read_file_seq_entry(fs, fie.seq_block, j, &fse);
+                RESULT(block_idx) seq_block =
+                    get_valid_next_block(fs, fie.seq_block);
+                if (seq_block.code != RET_OK) {
+                    return RESULT_ERR(uint32_t, seq_block.code);
+                }
+                read_file_seq_entry(fs, seq_block.value, j, &fse);
                 if (is_entry_used(fse.f) && is_entry_committed(fse.f)) {
                     /* R2F2_LOG_DEBUG( */
                     /*     "looking for offset %zu, block covers range %u - %u",

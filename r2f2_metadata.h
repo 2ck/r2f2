@@ -50,20 +50,20 @@ typedef uint8_t entry_flags_t;
 typedef struct __attribute__((packed)) dir_meta_entry {
     entry_flags_t f;
     char path[MAX_PATH_LEN];
-    block_idx next_block;
+    block_idx next_block[NUM_NEXT_PTRS];
 } dir_meta_entry_t;
 
 typedef struct dir_meta_block {
     struct dir_meta_entry entries[NUM_DIR_META_ENTRIES];
+    block_idx next[NUM_NEXT_PTRS];
+    uint8_t _[24];
 } dir_meta_block_t;
 STATIC_ASSERT(sizeof(struct dir_meta_block) == BLOCK_SIZE);
 
 typedef struct __attribute__((packed)) file_indir_entry {
     entry_flags_t f;
 
-    uint8_t padding[8];
-
-    block_idx seq_block;
+    block_idx seq_block[NUM_NEXT_PTRS];
 } file_indir_entry_t;
 
 typedef struct __attribute__((packed)) file_indir_block {
@@ -71,9 +71,11 @@ typedef struct __attribute__((packed)) file_indir_block {
 
     struct file_indir_entry entries[NUM_FILE_INDIR_ENTRIES];
 
-    uint8_t padding[641];
+    block_idx rnd_updates[NUM_NEXT_PTRS];
 
-    block_idx next_block;
+    uint8_t padding[506];
+
+    block_idx next_block[NUM_NEXT_PTRS];
 } file_indir_block_t;
 STATIC_ASSERT(sizeof(struct file_indir_block) == BLOCK_SIZE);
 
@@ -98,6 +100,15 @@ STATIC_ASSERT(sizeof(struct file_seq_block) == BLOCK_SIZE);
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/**
+ * next_block entries are actually arrays, with the length NUM_NEXT_PTRS (2 by
+ * default). A value can be all 1 (unused), all 0 (no longer valid/overridden)
+ * or some valid block_idx. Later entries always override previous entries.
+ *
+ * returns the value of the last valid next_block entry
+ */
+RESULT(block_idx) get_valid_next_block(r2f2_fs_t *fs, block_idx *indices);
 
 /* flip the corresponding bit to 0 (flash is 0xFF by default) */
 void mark_entry_committed(entry_flags_t *f);

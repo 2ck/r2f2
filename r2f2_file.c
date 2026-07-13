@@ -93,7 +93,12 @@ RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path) {
             }
 
             if (memcmp(dme.path, segment, MAX_PATH_LEN) == 0) {
-                current_block = dme.next_block;
+                RESULT(block_idx) next_block =
+                    get_valid_next_block(fs, dme.next_block);
+                if (next_block.code != RET_OK) {
+                    return next_block;
+                }
+                current_block = next_block.value;
                 found_entry = true;
             }
         }
@@ -138,7 +143,9 @@ RESULT(block_idx) r2f2_find_file_indir_block(r2f2_fs_t *fs, const char *path) {
     for (size_t i = 0; i < NUM_DIR_META_ENTRIES; i++) {
         read_dir_meta_entry(fs, dir_meta_block_idx, i, &dme);
         if (memcmp(dme.path, file_basename, MAX_PATH_LEN) == 0) {
-            return RESULT_OK(block_idx, dme.next_block);
+            RESULT(block_idx) next_block =
+                get_valid_next_block(fs, dme.next_block);
+            return next_block;
         }
     }
 
@@ -190,7 +197,8 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path, r2f2_fd fd) {
     }
 
     file_indir_entry_t fie;
-    fie.seq_block = file_seq_block_idx.value;
+    memset(fie.seq_block, 0xFF, sizeof(fie.seq_block));
+    fie.seq_block[0] = file_seq_block_idx.value;
     mark_entry_used(&fie.f);
 
     RESULT(block_idx) file_indir_block_idx = allocate_block(fs);
@@ -217,7 +225,8 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path, r2f2_fd fd) {
      */
     memcpy(dme.path, b, strlen(b) + 1);
 
-    dme.next_block = file_indir_block_idx.value;
+    memset(dme.next_block, 0xFF, sizeof(dme.next_block));
+    dme.next_block[0] = file_indir_block_idx.value;
 
     mark_entry_used(&dme.f);
 

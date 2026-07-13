@@ -110,13 +110,18 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
             return ret;
         }
 
-        RESULT(uint32_t) last_fse = get_last_file_seq_entry(fs, fie.seq_block);
+        RESULT(block_idx) seq_block = get_valid_next_block(fs, fie.seq_block);
+        if (seq_block.code != RET_OK) {
+            return seq_block.code;
+        }
+        RESULT(uint32_t) last_fse =
+            get_last_file_seq_entry(fs, seq_block.value);
         if (last_fse.code != RET_OK) {
             return last_fse.code;
         }
 
         file_seq_entry_t fse;
-        ret = read_file_seq_entry(fs, fie.seq_block, last_fse.value, &fse);
+        ret = read_file_seq_entry(fs, seq_block.value, last_fse.value, &fse);
         if (ret != RET_OK) {
             return ret;
         }
@@ -125,7 +130,7 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
         f->file_offset = 0;
         f->file_size = fse.current_file_size;
         f->file_indir_block = fib_ret.value;
-        f->last_seq_block = fie.seq_block;
+        f->last_seq_block = seq_block.value;
         f->next_seq_entry_idx = last_fse.value + 1;
         f->last_data_block = fse.data_block;
         f->last_data_block_fill = fse.data_block_fill_level;
