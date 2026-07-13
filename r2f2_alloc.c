@@ -2,129 +2,6 @@
 #include "util/helpers.h"
 #include "util/logger.h"
 
-#if (R2F2_ALLOC_METHOD == R2F2_ALLOC_BITFIELD)
-// one or more allocation blocks contain bitfields
-// each bit corresponds linearly to the next blocks in flash
-// after a certain offset
-// default 1: free
-// flip to 0: atomically allocate
-//
-// there is additionally a per-page header to be able to safely
-// move the entries to a new block when an erase is needed
-
-void mark_alloc_used(alloc_flags_t *f) {
-    *f &= ~ALLOC_USED_MASK;
-}
-bool is_alloc_used(alloc_flags_t f) {
-    return (f & ALLOC_USED_MASK) == 0;
-}
-
-struct __attribute__((packed)) alloc_bitmap_block {
-    struct {
-        alloc_flags_t flags;
-        uint8_t state[255];
-    } chunk[16];
-};
-STATIC_ASSERT(sizeof(struct alloc_bitmap_block) == BLOCK_SIZE);
-
-block_idx alloc_bitmap_block_idx = FIRST_ALLOCABLE_BLOCK - 1;
-r2f2_ret prepare_block_allocator(r2f2_fs_t *fs) {
-    // mark all alloc bitmap chunks as valid
-    alloc_flags_t flags = ALLOC_FLAGS_INITIAL;
-    mark_alloc_used(&flags);
-
-    for (size_t i = 0; i < 16; i++) {
-        /* TODO get rid of magic number 256 with sizeof */
-        r2f2_ret ret = fs->cfg->flash_write(
-            fs, alloc_bitmap_block_idx * fs->cfg->geom.block_size + i * 256, 1,
-            &flags);
-        if (ret != RET_OK) {
-            R2F2_LOG_ERR(
-                "write flags failed (%d) at block %u, offset %zu * 256", ret,
-                alloc_bitmap_block_idx, i);
-            return ret;
-        }
-    }
-
-    return RET_OK;
-}
-
-block_idx next_alloc = FIRST_ALLOCABLE_BLOCK;
-RESULT(block_idx) allocate_block(r2f2_fs_t *fs) {
-    const int32_t max_its = 100;
-    int32_t its = 0;
-    do {
-        uint8_t chunk_idx = next_alloc / (255 * 8);
-        if (chunk_idx > 15) {
-            R2F2_LOG_ERR("chunk_idx overflow");
-            RESULT_ERR(block_idx, RET_NOMEM);
-        }
-
-        alloc_flags_t flags;
-        /* bitmap chunk valid? */
-        r2f2_ret ret = fs->cfg->flash_read(
-            fs,
-            alloc_bitmap_block_idx * fs->cfg->geom.block_size + chunk_idx * 256,
-            1, &flags);
-        if (ret != RET_OK) {
-            R2F2_LOG_ERR(
-                "reading allocate bitmap flags failed (%d) at chunk %d", ret,
-                chunk_idx);
-            return RESULT_ERR(block_idx, ret);
-        }
-        /* TODO: helpers for these reads/writes */
-
-        if (!is_alloc_used(flags)) {
-            next_alloc += 255 * 8;
-            continue;
-        }
-
-        uint8_t some_bits = 0;
-        ret = fs->cfg->flash_read(fs,
-                                  alloc_bitmap_block_idx *
-                                          fs->cfg->geom.block_size +
-                                      chunk_idx * 256
-                                      /* bitmap starts after the flags */
-                                      + 1
-                                      /* byte to read */
-                                      + (next_alloc / 8),
-                                  1, &some_bits);
-        if (ret != RET_OK) {
-            R2F2_LOG_ERR(
-                "reading allocate bitmap failed (%d) at chunk %d next_alloc %d",
-                ret, chunk_idx, next_alloc);
-            return RESULT_ERR(block_idx, ret);
-        }
-
-        if (some_bits & (1 << (next_alloc % 8))) {
-            /* available, immediately flip to 0 before giving it out */
-            some_bits ^= (1 << (next_alloc % 8));
-            ret = fs->cfg->flash_write(fs,
-                                       alloc_bitmap_block_idx *
-                                               fs->cfg->geom.block_size +
-                                           chunk_idx * 256
-                                           /* bitmap starts after the flags */
-                                           + 1
-                                           /* byte to read */
-                                           + (next_alloc / 8),
-                                       1, &some_bits);
-
-            if (ret != RET_OK) {
-                R2F2_LOG_ERR("writing allocate bitmap failed (%d) at chunk %d "
-                             "next_alloc %d",
-                             ret, chunk_idx, next_alloc);
-                return RESULT_ERR(block_idx, ret);
-            }
-
-            return RESULT_OK(block_idx, next_alloc++);
-        }
-    } while (its++ < max_its);
-    R2F2_LOG_ERR("Couldn't find free block in %d iterations", max_its);
-    return RESULT_ERR(block_idx, RET_NOMEM);
-}
-
-#elif (R2F2_ALLOC_METHOD == R2F2_ALLOC_CIRCULAR_BUFFER)
-
 /*
  * The indices of all free blocks are stored in alloc blocks. If all flash block
  * indices fit in n blocks, there are n+k alloc blocks, where k>=1. The larger
@@ -152,8 +29,8 @@ static uint32_t _alloc_region_start_ptr;
 static uint32_t _alloc_region_alloc_ptr;
 static uint32_t _alloc_region_next_free_ptr;
 
-#  define ALLOC_REGION_FIRST_BLOCK (16U)
-#  define ALLOC_REGION_LAST_BLOCK (48U)
+#define ALLOC_REGION_FIRST_BLOCK (16U)
+#define ALLOC_REGION_LAST_BLOCK (48U)
 
 static inline r2f2_ret advance_alloc_ptr(r2f2_fs_t *fs) {
     uint32_t new_alloc_ptr =
@@ -332,5 +209,3 @@ r2f2_ret free_block(r2f2_fs_t *fs, block_idx b) {
 
     return RET_OK;
 }
-
-#endif
