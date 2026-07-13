@@ -323,6 +323,29 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
             }
             f->last_seq_block = b.value;
             f->next_seq_entry_idx = 0;
+
+            RESULT(uint32_t) new_indir_entry =
+                get_free_file_indir_entry(fs, f->file_indir_block);
+            if (new_indir_entry.code != RET_OK) {
+                return new_indir_entry.code;
+            }
+
+            file_indir_entry_t fie;
+            fie.seq_block[0] = b.value;
+            mark_entry_used(&fie.f);
+
+            r2f2_ret ie_ret = write_file_indir_entry(
+                fs, f->file_indir_block, new_indir_entry.value, &fie);
+
+            if (ie_ret != RET_OK) {
+                return ie_ret;
+            }
+            mark_entry_committed(&fie.f);
+            ie_ret = write_file_indir_entry_flags(fs, f->file_indir_block,
+                                                  new_indir_entry.value, &fie);
+            if (ie_ret != RET_OK) {
+                return ie_ret;
+            }
         }
 
         file_seq_entry_t fse;
