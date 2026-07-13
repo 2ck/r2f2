@@ -240,7 +240,8 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path, r2f2_fd fd) {
         return ret;
     }
     mark_entry_committed(&dme.f);
-    ret = write_dir_meta_entry_flags(fs, dir_meta_block_idx.value, 0, &dme.f);
+    ret = write_dir_meta_entry_flags(fs, dir_meta_block_idx.value,
+                                     dme_num.value, &dme.f);
     if (ret != RET_OK) {
         return ret;
     }
