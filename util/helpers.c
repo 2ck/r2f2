@@ -23,7 +23,7 @@ bool is_all_zero(const void *buf, size_t size) {
     return true;
 }
 
-void hexdump(const uint8_t *buf, size_t len) {
+void r2f2_hexdump(const uint8_t *buf, size_t len) {
     size_t linenr = 0;
     const size_t breakafter = 32;
     for (size_t i = 0; i < len; i++) {

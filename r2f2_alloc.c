@@ -218,7 +218,7 @@ static inline r2f2_ret advance_next_free_ptr(r2f2_fs_t *fs) {
             if (!is_all_zero(pg_buf, sizeof(pg_buf))) {
                 R2F2_LOG_ERR("unexpected value in first alloc_block (should be "
                              "empty), dumping: ");
-                hexdump(pg_buf, sizeof(pg_buf));
+                r2f2_hexdump(pg_buf, sizeof(pg_buf));
                 return RET_ERR;
             }
         }
