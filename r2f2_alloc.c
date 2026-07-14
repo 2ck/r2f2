@@ -2,35 +2,13 @@
 #include "util/helpers.h"
 #include "util/logger.h"
 
-/*
- * The indices of all free blocks are stored in alloc blocks. If all flash block
- * indices fit in n blocks, there are n+k alloc blocks, where k>=1. The larger
- * the value of k, the more allocations we can perform without erasing a fully
- * used alloc block.
- *
- * An alloc block entry has three valid states:
- * - all 1s (default in flash): an empty slot
- * - 0 < value <= LAST_BLOCK_IDX: a free block index
- * - 0: an allocated/consumed block index
- *
- * An alloc pointer points to the first alloc block entry; allocation of a block
- * consumes the entry and increments the alloc pointer.
- *
- * A second pointer points past the last alloc entry; freeing a block writes its
- * index to this location and increments the pointer.
- *
- */
-
-typedef struct __attribute__((packed)) alloc_block_entry {
-    block_idx b;
-} alloc_block_entry_t;
-
 static uint32_t _alloc_region_start_ptr;
 static uint32_t _alloc_region_alloc_ptr;
 static uint32_t _alloc_region_next_free_ptr;
 
-#define ALLOC_REGION_FIRST_BLOCK (16U)
-#define ALLOC_REGION_LAST_BLOCK (48U)
+static const uint32_t alloc_region_first_block = 8;
+static uint32_t alloc_region_last_block;
+static uint32_t first_allocable_block;
 
 static inline r2f2_ret advance_alloc_ptr(r2f2_fs_t *fs) {
     uint32_t new_alloc_ptr =
@@ -38,7 +16,7 @@ static inline r2f2_ret advance_alloc_ptr(r2f2_fs_t *fs) {
 
     /* our alloc pointer must not move outside of our alloc block range */
     if (new_alloc_ptr >=
-        (ALLOC_REGION_LAST_BLOCK + 1) * fs->cfg->geom.block_size) {
+        (alloc_region_last_block + 1) * fs->cfg->geom.block_size) {
         /*
          * Once we have allocated the necessary number of blocks to reach this
          * condition, the first alloc block should contain some free blocks
@@ -75,7 +53,7 @@ static inline r2f2_ret advance_next_free_ptr(r2f2_fs_t *fs) {
 
     /* our next_free pointer must not move outside of our alloc block range */
     if (new_next_free_ptr >=
-        (ALLOC_REGION_LAST_BLOCK + 1) * fs->cfg->geom.block_size) {
+        (alloc_region_last_block + 1) * fs->cfg->geom.block_size) {
         /*
          * Once we have freed the necessary number of blocks to reach this
          * condition, we need to wrap over to the first alloc block. All entries
@@ -116,13 +94,20 @@ static inline r2f2_ret advance_next_free_ptr(r2f2_fs_t *fs) {
 }
 
 r2f2_ret prepare_block_allocator(r2f2_fs_t *fs) {
+    size_t alloc_region_size =
+        fs->cfg->geom.num_blocks * sizeof(alloc_block_entry_t);
+    alloc_region_last_block = alloc_region_first_block +
+                              (alloc_region_size / fs->cfg->geom.block_size) +
+                              1;
+    first_allocable_block = alloc_region_last_block + 1;
+
     _alloc_region_start_ptr =
-        ALLOC_REGION_FIRST_BLOCK * fs->cfg->geom.block_size;
+        alloc_region_first_block * fs->cfg->geom.block_size;
     _alloc_region_alloc_ptr = _alloc_region_start_ptr;
 
     /* fill our alloc blocks with the indices of all non-reserved blocks */
     size_t entry_idx = 0;
-    for (block_idx b = FIRST_ALLOCABLE_BLOCK; b < fs->cfg->geom.num_blocks;
+    for (block_idx b = first_allocable_block; b < fs->cfg->geom.num_blocks;
          b++) {
         alloc_block_entry_t entry = {.b = b};
         r2f2_ret ret = fs->cfg->flash_write(
@@ -142,17 +127,17 @@ r2f2_ret prepare_block_allocator(r2f2_fs_t *fs) {
     R2F2_LOG_DEBUG("valid alloc region from block %u to %u (0x%x to 0x%x), "
                    "entry size %zu, num_entries %u, actual entries from block "
                    "%u to %u (0x%x to 0x%x)",
-                   ALLOC_REGION_FIRST_BLOCK, ALLOC_REGION_LAST_BLOCK,
-                   ALLOC_REGION_FIRST_BLOCK * fs->cfg->geom.block_size,
-                   ALLOC_REGION_LAST_BLOCK * fs->cfg->geom.block_size,
+                   alloc_region_first_block, alloc_region_last_block,
+                   alloc_region_first_block * fs->cfg->geom.block_size,
+                   alloc_region_last_block * fs->cfg->geom.block_size,
                    sizeof(alloc_block_entry_t),
-                   fs->cfg->geom.num_blocks - FIRST_ALLOCABLE_BLOCK,
+                   fs->cfg->geom.num_blocks - first_allocable_block,
                    _alloc_region_start_ptr / fs->cfg->geom.block_size,
                    _alloc_region_next_free_ptr / fs->cfg->geom.block_size,
                    _alloc_region_start_ptr, _alloc_region_next_free_ptr);
 
     R2F2_ASSERT(_alloc_region_next_free_ptr, <,
-                ALLOC_REGION_LAST_BLOCK * fs->cfg->geom.block_size, "%u");
+                alloc_region_last_block * fs->cfg->geom.block_size, "%u");
 
     return RET_OK;
 }
@@ -192,9 +177,9 @@ RESULT(block_idx) allocate_block(r2f2_fs_t *fs) {
 }
 
 r2f2_ret free_block(r2f2_fs_t *fs, block_idx b) {
-    if (b < FIRST_ALLOCABLE_BLOCK || b >= fs->cfg->geom.num_blocks) {
+    if (b < first_allocable_block || b >= fs->cfg->geom.num_blocks) {
         R2F2_LOG_ERR("invalid block to be freed %u, not in bounds [%u, %u[", b,
-                     FIRST_ALLOCABLE_BLOCK, fs->cfg->geom.num_blocks);
+                     first_allocable_block, fs->cfg->geom.num_blocks);
         return RET_ERR;
     }
 
