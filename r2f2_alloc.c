@@ -6,7 +6,8 @@ static uint32_t _alloc_region_start_ptr;
 static uint32_t _alloc_region_alloc_ptr;
 static uint32_t _alloc_region_next_free_ptr;
 
-static const uint32_t alloc_region_first_block = 8;
+/* blocks 0+1 as superblock(s) */
+static const uint32_t alloc_region_first_block = 2;
 static uint32_t alloc_region_last_block;
 static uint32_t first_allocable_block;
 
