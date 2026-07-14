@@ -403,9 +403,9 @@ RESULT(uint32_t) find_data_block_for_off(r2f2_fs_t *fs,
                                          block_idx file_indir_block_idx,
                                          size_t off) {
     /*
-     * For sequential writes, the first seq_entry is for file creation.
-     * Each subsequent 4096B are one data block aka seq_entry further, so
-     * 128*4096B is one seq_block aka one indir_entry further.
+     * For sequential writes, each subsequent 4096B are one data block aka
+     * seq_entry further, so 128*4096B is one seq_block aka one indir_entry
+     * further.
      *
      * In case we have fsynced after writing < 4096B, we have more metadata
      * entries than expected, so we may need to search ahead from our expected
@@ -413,11 +413,9 @@ RESULT(uint32_t) find_data_block_for_off(r2f2_fs_t *fs,
      */
 
     size_t expected_indir_entry =
-        (off + fs->cfg->geom.block_size - 1) /
-        (fs->cfg->geom.block_size * (NUM_FILE_SEQ_ENTRIES));
+        off / (fs->cfg->geom.block_size * (NUM_FILE_SEQ_ENTRIES));
     size_t expected_seq_entry =
-        ((off + fs->cfg->geom.block_size - 1) %
-         (fs->cfg->geom.block_size * (NUM_FILE_SEQ_ENTRIES))) /
+        (off % (fs->cfg->geom.block_size * (NUM_FILE_SEQ_ENTRIES))) /
         fs->cfg->geom.block_size;
 
     size_t start_from_indir_entry = expected_indir_entry;

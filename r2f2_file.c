@@ -170,30 +170,29 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path, r2f2_fd fd) {
     }
 
     /*
-     * we allocate a data block, which is pointed to by a file_seq_entry,
-     * in a block which in turn is pointed to by a file_indir_entry, in a block
-     * which is finally pointed to by the dir entry
+     * We allocate a file_seq_block, but no data_block. Then we allocate a
+     * file_indir_block, create the file_indir_entry pointing to our
+     * file_seq_block. Finally, our dir_meta_entry points to the
+     * file_indir_block.
+     *
+     * ┌─────────┐
+     * │dir_block│
+     * │entry ─┐ │
+     * └───────┼─┘
+     *         │
+     * ┌───────▼────────┐
+     * │file_indir_block│
+     * │entry ─┐        │
+     * └───────┼────────┘
+     *         │
+     * ┌───────▼──────┐
+     * │file_seq_block│
+     * └──────────────┘
      */
-
-    RESULT(block_idx) data_block_idx = allocate_block(fs);
-    if (data_block_idx.code != RET_OK) {
-        return data_block_idx.code;
-    }
-
-    file_seq_entry_t fse;
-    fse.data_block = data_block_idx.value;
-    fse.data_block_fill_level = 0;
-    fse.data_block_offset_in_file = 0;
-    fse.current_file_size = 0;
-    mark_entry_used(&fse.f);
 
     RESULT(block_idx) file_seq_block_idx = allocate_block(fs);
     if (file_seq_block_idx.code != RET_OK) {
         return file_seq_block_idx.code;
-    }
-    r2f2_ret ret = write_file_seq_entry(fs, file_seq_block_idx.value, 0, &fse);
-    if (ret != RET_OK) {
-        return ret;
     }
 
     file_indir_entry_t fie;
@@ -205,7 +204,8 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path, r2f2_fd fd) {
     if (file_indir_block_idx.code != RET_OK) {
         return file_indir_block_idx.code;
     }
-    ret = write_file_indir_entry(fs, file_indir_block_idx.value, 0, &fie);
+    r2f2_ret ret =
+        write_file_indir_entry(fs, file_indir_block_idx.value, 0, &fie);
     if (ret != RET_OK) {
         return ret;
     }
@@ -237,11 +237,6 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path, r2f2_fd fd) {
     }
 
     /* commit, starting from the leaf to the root */
-    mark_entry_committed(&fse.f);
-    ret = write_file_seq_entry_flags(fs, file_seq_block_idx.value, 0, &fse.f);
-    if (ret != RET_OK) {
-        return ret;
-    }
     mark_entry_committed(&fie.f);
     ret =
         write_file_indir_entry_flags(fs, file_indir_block_idx.value, 0, &fie.f);
@@ -260,8 +255,9 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path, r2f2_fd fd) {
     f->file_size = 0;
     f->file_indir_block = file_indir_block_idx.value;
     f->last_seq_block = file_seq_block_idx.value;
-    f->next_seq_entry_idx = 1;
-    f->last_data_block = data_block_idx.value;
+    f->next_seq_entry_idx = 0;
+    /* no data block so far */
+    f->last_data_block = 0;
     f->last_data_block_fill = 0;
 
     return RET_OK;

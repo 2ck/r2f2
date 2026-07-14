@@ -105,11 +105,6 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
     }
 
     if (!creat) {
-        /*
-         * Our file already existed, so the last seq_entry contains the
-         * information we need
-         */
-
         RESULT(uint32_t) last_fie =
             get_last_file_indir_entry(fs, fib_ret.value);
         if (last_fie.code != RET_OK) {
@@ -129,7 +124,25 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
         }
         RESULT(uint32_t) last_fse =
             get_last_file_seq_entry(fs, seq_block.value);
-        if (last_fse.code != RET_OK) {
+
+        /*
+         * Our file already existed, so the last file_seq_entry normally
+         * contains the information we need. However, if the file was freshly
+         * created and has no contents yet, we don't even have such an entry
+         * yet.
+         */
+
+        if (last_fse.code == RET_NOT_FOUND) {
+            fildes_t *f = &fs->fds[fd.value];
+            f->file_offset = 0;
+            f->file_size = 0;
+            f->file_indir_block = fib_ret.value;
+            f->last_seq_block = seq_block.value;
+            f->next_seq_entry_idx = 0;
+            f->last_data_block = 0;
+            f->last_data_block_fill = 0;
+            return fd.value;
+        } else if (last_fse.code != RET_OK) {
             return last_fse.code;
         }
 
@@ -296,6 +309,15 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
     fildes_t *f = &fs->fds[fd];
     if (f->block_buffer.count == 0) {
         return RET_OK;
+    }
+
+    /* do we even have a data block yet? */
+    if (f->last_data_block == 0) {
+        RESULT(block_idx) data_block_idx = allocate_block(fs);
+        if (data_block_idx.code != RET_OK) {
+            return data_block_idx.code;
+        }
+        f->last_data_block = data_block_idx.value;
     }
 
     size_t total_written = 0;
