@@ -4,8 +4,9 @@
 #include <fcntl.h>
 #include <stdint.h>
 
-#define PAGE_SIZE (256U)
-#define BLOCK_SIZE (4096U)
+#define R2F2_MALLOC malloc
+#define R2F2_FREE free
+
 #define MAX_PATH_LEN (118U)
 
 #define NUM_DIR_META_ENTRIES (32U)

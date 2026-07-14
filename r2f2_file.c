@@ -274,6 +274,7 @@ RESULT(r2f2_fd) r2f2_create_fd(r2f2_fs_t *fs, const char *path) {
         }
         fs->fds[i].active = true;
         memcpy(fs->fds[i].path, path, MAX_PATH_LEN);
+        fs->fds[i].block_buffer.data = R2F2_MALLOC(fs->cfg->geom.block_size);
         fs->fds[i].block_buffer.count = 0;
         return RESULT_OK(r2f2_fd, i);
     }

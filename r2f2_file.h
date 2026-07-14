@@ -21,8 +21,7 @@ struct fildes {
 #if R2F2_USE_WRITE_BUFFER
     struct {
         size_t count;
-        /* TODO: should be malloc'ed on mount */
-        uint8_t data[BLOCK_SIZE];
+        uint8_t *data;
     } block_buffer;
 #endif
 };

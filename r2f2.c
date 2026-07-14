@@ -34,7 +34,20 @@ r2f2_ret r2f2_format(r2f2_fs_t *fs) {
 }
 
 r2f2_ret r2f2_mount(r2f2_fs_t *fs) {
-    /* TODO: all sorts of validity checks */
+    R2F2_ASSERT(fs->cfg->geom.block_size % fs->cfg->geom.page_size, ==, 0,
+                "%u");
+
+    /* data structure size checks */
+    R2F2_ASSERT(sizeof(struct r2f2_fs_info), <=, fs->cfg->geom.page_size,
+                "%zu");
+    R2F2_ASSERT(sizeof(struct r2f2_superblock), <=, fs->cfg->geom.block_size,
+                "%zu");
+    R2F2_ASSERT(sizeof(struct dir_meta_block), <=, fs->cfg->geom.block_size,
+                "%zu");
+    R2F2_ASSERT(sizeof(struct file_indir_block), <=, fs->cfg->geom.block_size,
+                "%zu");
+    R2F2_ASSERT(sizeof(struct file_seq_block), <=, fs->cfg->geom.block_size,
+                "%zu");
 
     r2f2_fs_info_t fs_info;
     /* read root block to see if there is logfs on flash */
@@ -144,6 +157,8 @@ r2f2_ret r2f2_close(r2f2_fs_t *fs, r2f2_fd fd) {
     r2f2_fsync(fs, fd);
 
     fs->fds[fd].active = false;
+    fs->fds[fd].block_buffer.count = 0;
+    R2F2_FREE(fs->fds[fd].block_buffer.data);
     return RET_OK;
 }
 

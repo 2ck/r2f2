@@ -46,8 +46,8 @@ typedef enum {
         __auto_type _thing = (thing);                                          \
         __typeof__(_thing) _otherthing = (otherthing);                         \
         if (!(_thing cond _otherthing)) {                                      \
-            R2F2_LOG_ERR(#thing " is " fmt ", expected " fmt, _thing,          \
-                         _otherthing);                                         \
+            R2F2_LOG_ERR("%s is " fmt ", but must be %s " fmt, #thing, _thing, \
+                         #cond, _otherthing);                                  \
             R2F2_ABORT();                                                      \
         }                                                                      \
     } while (0)

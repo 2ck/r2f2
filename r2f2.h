@@ -18,8 +18,8 @@ struct r2f2_cfg {
     r2f2_ret (*flash_erase)(r2f2_fs_t *fs, uint32_t addr, uint32_t len);
 
     struct {
-        uint16_t page_size;
-        uint16_t block_size;
+        uint32_t page_size;
+        uint32_t block_size;
         uint32_t num_blocks;
     } geom;
 

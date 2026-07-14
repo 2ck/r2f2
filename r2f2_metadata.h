@@ -22,26 +22,21 @@ struct __attribute__((packed)) r2f2_fs_info {
         uint8_t version;
 
         struct __attribute__((packed)) {
-            uint16_t page_size;
-            uint16_t block_size;
+            uint32_t page_size;
+            uint32_t block_size;
             uint32_t num_blocks;
 
-            uint16_t path_len;
+            uint32_t path_len;
         } fs_config;
 
     } global_metadata;
 
     block_idx root_dir_block;
-
-    uint8_t padding[PAGE_SIZE - 19];
 };
-STATIC_ASSERT(sizeof(struct r2f2_fs_info) == PAGE_SIZE);
 
 struct __attribute__((packed)) r2f2_superblock {
     r2f2_fs_info_t fs_info;
-    uint8_t padding[BLOCK_SIZE - PAGE_SIZE];
 };
-STATIC_ASSERT(sizeof(struct r2f2_superblock) == BLOCK_SIZE);
 
 typedef uint8_t entry_flags_t;
 #define ENTRY_COMMIT_MASK (1U << 0)
@@ -58,7 +53,6 @@ typedef struct dir_meta_block {
     block_idx next[NUM_NEXT_PTRS];
     uint8_t _[24];
 } dir_meta_block_t;
-STATIC_ASSERT(sizeof(struct dir_meta_block) == BLOCK_SIZE);
 
 typedef struct __attribute__((packed)) file_indir_entry {
     entry_flags_t f;
@@ -77,25 +71,21 @@ typedef struct __attribute__((packed)) file_indir_block {
 
     block_idx next_block[NUM_NEXT_PTRS];
 } file_indir_block_t;
-STATIC_ASSERT(sizeof(struct file_indir_block) == BLOCK_SIZE);
 
 typedef struct __attribute__((packed)) file_seq_entry {
     entry_flags_t f;
 
     block_idx data_block;
-    uint16_t data_block_fill_level;
+    uint32_t data_block_fill_level;
 
     uint32_t data_block_offset_in_file;
 
     uint32_t current_file_size;
-
-    uint8_t padding[17];
 } file_seq_entry_t;
 
 typedef struct __attribute__((packed)) file_seq_block {
     struct file_seq_entry entries[NUM_FILE_SEQ_ENTRIES];
 } file_seq_block_t;
-STATIC_ASSERT(sizeof(struct file_seq_block) == BLOCK_SIZE);
 
 #ifdef __cplusplus
 extern "C" {
