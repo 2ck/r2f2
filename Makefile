@@ -1,6 +1,8 @@
 CC ?= cc
 AR ?= ar
 
+CFLAGS += -MMD -MP
+
 SRCS = r2f2.c r2f2_alloc.c r2f2_file.c r2f2_metadata.c util/helpers.c
 OBJS = $(patsubst %.c,build/%.o,$(SRCS))
 
@@ -16,7 +18,8 @@ LDFLAGS += -L build -l r2f2
 
 OUTLIB = build/libr2f2.a
 
-.PHONY: all tests clean
+DEPS = $(OBJS:.o=.d)
+
 
 all: $(OUTLIB)
 
@@ -36,3 +39,6 @@ build/%.o: %.c
 
 clean:
 	rm -rf build
+
+-include $(DEPS)
+.PHONY: all tests clean
