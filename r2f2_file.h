@@ -10,13 +10,26 @@ struct fildes {
     size_t file_offset;
     size_t file_size;
 
-    block_idx file_indir_block;
+    struct {
+        struct {
+            block_idx block;
+            uint32_t entry;
+        } dir;
 
-    block_idx last_seq_block;
-    uint32_t next_seq_entry_idx;
+        struct {
+            block_idx block;
+        } indir;
 
-    block_idx last_data_block;
-    size_t last_data_block_fill;
+        struct {
+            block_idx last_block;
+            uint32_t next_entry;
+        } seq;
+
+        struct {
+            block_idx last_block;
+            size_t last_block_fill;
+        } data;
+    } meta;
 
 #if R2F2_USE_WRITE_BUFFER
     struct {
@@ -35,6 +48,16 @@ extern "C" {
  * error in case no matching dir_meta_block was found
  */
 RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path);
+
+/**
+ * a file whose dir_meta_entry previously directly pointed to a file_seq_block
+ * has now grown too large, so we insert a file_indir_block inbetween
+ * updates the dir entry "in place" and updates the in-RAM fd contents
+ *
+  returns RET_OK on success or an error code on fail
+ */
+r2f2_ret r2f2_migrate_file_to_indir_block(r2f2_fs_t *fs, r2f2_fd fd);
+
 /**
  * returns the file's first file_indir_block as pointed to by the
  * dir_meta_entry, or a FILE_NOT_FOUND error in case no matching entry was found
@@ -45,7 +68,7 @@ RESULT(block_idx) r2f2_find_file_indir_block(r2f2_fs_t *fs, const char *path);
  * creates the in-flash metadata for a file. the directory the file resides in
  * must already exist
  */
-r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path, r2f2_fd fd);
+RESULT(r2f2_fd) r2f2_register_file(r2f2_fs_t *fs, const char *path);
 
 /**
  * create an in-RAM file descriptor

@@ -38,12 +38,20 @@ void mark_entry_used(entry_flags_t *f) {
     *f &= ~ENTRY_USED_MASK;
 }
 
+void mark_entry_indirect(entry_flags_t *f) {
+    *f &= ~ENTRY_INDIRECT_MASK;
+}
+
 bool is_entry_committed(entry_flags_t f) {
     return (f & ENTRY_COMMIT_MASK) == 0;
 }
 
 bool is_entry_used(entry_flags_t f) {
     return (f & ENTRY_USED_MASK) == 0;
+}
+
+bool is_entry_indirect(entry_flags_t f) {
+    return (f & ENTRY_INDIRECT_MASK) == 0;
 }
 
 r2f2_ret read_dir_meta_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
@@ -399,17 +407,17 @@ RESULT(uint32_t) get_last_file_seq_entry(r2f2_fs_t *fs,
     }
 }
 
-RESULT(uint32_t) find_data_block_for_off(r2f2_fs_t *fs,
-                                         block_idx file_indir_block_idx,
-                                         size_t off) {
+RESULT(block_idx) find_data_block_for_off(r2f2_fs_t *fs,
+                                          block_idx file_indir_block_idx,
+                                          size_t off) {
     /*
      * For sequential writes, each subsequent 4096B are one data block aka
      * seq_entry further, so 128*4096B is one seq_block aka one indir_entry
      * further.
      *
      * In case we have fsynced after writing < 4096B, we have more metadata
-     * entries than expected, so we may need to search ahead from our expected
-     * entries.
+     * entries than expected, so we may need to search ahead from our
+     * expected entries.
      */
 
     size_t expected_indir_entry =
@@ -432,12 +440,13 @@ RESULT(uint32_t) find_data_block_for_off(r2f2_fs_t *fs,
                 RESULT(block_idx) seq_block =
                     get_valid_next_block(fs, fie.seq_block);
                 if (seq_block.code != RET_OK) {
-                    return RESULT_ERR(uint32_t, seq_block.code);
+                    return RESULT_ERR(block_idx, seq_block.code);
                 }
                 read_file_seq_entry(fs, seq_block.value, j, &fse);
                 if (is_entry_used(fse.f) && is_entry_committed(fse.f)) {
                     /* R2F2_LOG_DEBUG( */
-                    /*     "looking for offset %zu, block covers range %u - %u",
+                    /*     "looking for offset %zu, block covers range %u -
+                     * %u",
                      */
                     /*     off, fse.data_block_offset_in_file, */
                     /*     fse.data_block_offset_in_file + */
@@ -447,7 +456,7 @@ RESULT(uint32_t) find_data_block_for_off(r2f2_fs_t *fs,
                          fse.data_block_offset_in_file +
                                  fse.data_block_fill_level >=
                              off)) {
-                        return RESULT_OK(uint32_t, fse.data_block);
+                        return RESULT_OK(block_idx, fse.data_block);
                     }
                 }
             }
@@ -460,15 +469,43 @@ RESULT(uint32_t) find_data_block_for_off(r2f2_fs_t *fs,
         start_from_seq_entry = 0;
     }
 
-    R2F2_LOG_ERR(
-        "expected indir_entry %zu or expected seq_entry %zu not correct, and "
-        "could not find correct entries",
-        expected_indir_entry, expected_seq_entry);
-    return RESULT_ERR(uint32_t, RET_NOT_FOUND);
+    R2F2_LOG_ERR("expected indir_entry %zu or expected seq_entry %zu not "
+                 "correct, and "
+                 "could not find correct entries",
+                 expected_indir_entry, expected_seq_entry);
+    return RESULT_ERR(block_idx, RET_NOT_FOUND);
 }
 
-void dump_file_seq_block(FILE *f, r2f2_fs_t *fs, block_idx file_indir_block,
-                         size_t file_indir_entry, block_idx file_seq_block) {
+RESULT(block_idx) find_data_block_for_off_direct(r2f2_fs_t *fs,
+                                                 block_idx file_seq_block_idx,
+                                                 size_t off) {
+    size_t expected_seq_entry =
+        (off % (fs->cfg->geom.block_size * (NUM_FILE_SEQ_ENTRIES))) /
+        fs->cfg->geom.block_size;
+
+    size_t start_from_seq_entry = expected_seq_entry;
+    for (size_t j = start_from_seq_entry; j < NUM_FILE_SEQ_ENTRIES; j++) {
+        file_seq_entry_t fse;
+        read_file_seq_entry(fs, file_seq_block_idx, j, &fse);
+        if (is_entry_used(fse.f) && is_entry_committed(fse.f)) {
+            if (fse.data_block_offset_in_file == off ||
+                (fse.data_block_offset_in_file <= off &&
+                 fse.data_block_offset_in_file + fse.data_block_fill_level >=
+                     off)) {
+                return RESULT_OK(block_idx, fse.data_block);
+            }
+        }
+    }
+
+    R2F2_LOG_ERR("expected direct seq_entry %zu not correct, and could not "
+                 "find correct entries",
+                 expected_seq_entry);
+    return RESULT_ERR(block_idx, RET_NOT_FOUND);
+}
+
+void dump_file_seq_block(FILE *f, r2f2_fs_t *fs, block_idx prev_block,
+                         size_t prev_entry, block_idx file_seq_block,
+                         bool direct) {
     fprintf(f,
             "\nfile_seq_block_%d [shape=record, fillcolor=\"#eadcf8\", "
             "\nlabel=\"{file_seq_block %u | { ",
@@ -478,16 +515,21 @@ void dump_file_seq_block(FILE *f, r2f2_fs_t *fs, block_idx file_indir_block,
     for (size_t i = 0; i < NUM_FILE_SEQ_ENTRIES; i++) {
         read_file_seq_entry(fs, file_seq_block, i, &fse);
         if (is_entry_used(fse.f) && is_entry_committed(fse.f)) {
-            fprintf(f, "{block %u | fill %u | offs %u | file size %u} | ",
-                    fse.data_block, fse.data_block_fill_level,
-                    fse.data_block_offset_in_file, fse.current_file_size);
+            fprintf(f, "{fill %u | offs %u | file size %u | data block %u} | ",
+                    fse.data_block_fill_level, fse.data_block_offset_in_file,
+                    fse.current_file_size, fse.data_block);
         }
     }
 
     fprintf(f, " }}\"\n];\n");
 
-    fprintf(f, "\nfile_indir_block_%u:e%zu -> file_seq_block_%u",
-            file_indir_block, file_indir_entry, file_seq_block);
+    if (direct) {
+        fprintf(f, "\ndir_block_%u:e%zu -> file_seq_block_%u", prev_block,
+                prev_entry, file_seq_block);
+    } else {
+        fprintf(f, "\nfile_indir_block_%u:e%zu -> file_seq_block_%u",
+                prev_block, prev_entry, file_seq_block);
+    }
 }
 
 void dump_file_indir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block,
@@ -501,8 +543,13 @@ void dump_file_indir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block,
     for (size_t i = 0; i < NUM_FILE_INDIR_ENTRIES; i++) {
         read_file_indir_entry(fs, file_indir_block, i, &fie);
         if (is_entry_used(fie.f) && is_entry_committed(fie.f)) {
-            /* FIXME: hardcoded entry 0 */
-            fprintf(f, "<e%zu> %u | ", i, fie.seq_block[0]);
+            RESULT(block_idx) next_block =
+                get_valid_next_block(fs, fie.seq_block);
+            if (next_block.code != RET_OK) {
+                R2F2_LOG_ERR("no valid next block");
+                return;
+            }
+            fprintf(f, "<e%zu> %u | ", i, next_block.value);
         }
     }
 
@@ -514,8 +561,14 @@ void dump_file_indir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block,
     for (size_t i = 0; i < NUM_FILE_INDIR_ENTRIES; i++) {
         read_file_indir_entry(fs, file_indir_block, i, &fie);
         if (is_entry_used(fie.f) && is_entry_committed(fie.f)) {
-            /* FIXME: hardcoded entry 0 */
-            dump_file_seq_block(f, fs, file_indir_block, i, fie.seq_block[0]);
+            RESULT(block_idx) next_block =
+                get_valid_next_block(fs, fie.seq_block);
+            if (next_block.code != RET_OK) {
+                R2F2_LOG_ERR("no valid next block");
+                return;
+            }
+            dump_file_seq_block(f, fs, file_indir_block, i, next_block.value,
+                                0);
         }
     }
 }
@@ -530,8 +583,14 @@ void dump_dir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block) {
     for (size_t d = 0; d < NUM_DIR_META_ENTRIES; d++) {
         read_dir_meta_entry(fs, dir_block, d, &dme);
         if (is_entry_used(dme.f) && is_entry_committed(dme.f)) {
-            /* FIXME: hardcoded entry 0 */
-            fprintf(f, "{ %s | <e%zu> %u} | ", dme.path, d, dme.next_block[0]);
+            RESULT(block_idx) next_block =
+                get_valid_next_block(fs, dme.next_block);
+            if (next_block.code != RET_OK) {
+                R2F2_LOG_ERR("no valid next block");
+                return;
+            }
+            fprintf(f, "{ \\\"%s\\\" | <e%zu> %u} | ", dme.path, d,
+                    next_block.value);
         }
     }
 
@@ -540,8 +599,17 @@ void dump_dir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block) {
     for (size_t d = 0; d < NUM_DIR_META_ENTRIES; d++) {
         read_dir_meta_entry(fs, dir_block, d, &dme);
         if (is_entry_used(dme.f) && is_entry_committed(dme.f)) {
-            /* FIXME: hardcoded entry 0 */
-            dump_file_indir_block(f, fs, dir_block, d, dme.next_block[0]);
+            RESULT(block_idx) next_block =
+                get_valid_next_block(fs, dme.next_block);
+            if (next_block.code != RET_OK) {
+                R2F2_LOG_ERR("no valid next block");
+                return;
+            }
+            if (is_entry_indirect(dme.f)) {
+                dump_file_indir_block(f, fs, dir_block, d, next_block.value);
+            } else {
+                dump_file_seq_block(f, fs, dir_block, d, next_block.value, 1);
+            }
         }
     }
 }

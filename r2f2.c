@@ -74,94 +74,147 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
         return RET_ERR;
     }
 
-    RESULT(r2f2_fd) fd = r2f2_create_fd(fs, path);
-    if (fd.code != RET_OK) {
-        R2F2_LOG_ERR("failed (%d) to create fd for path '%s'", fd.code, path);
-        return fd.code;
+    RESULT(block_idx) dmb_ret = r2f2_find_dir_meta_block(fs, path);
+    if (dmb_ret.code != RET_OK) {
+        R2F2_LOG_ERR("traversal to dir_meta_block failed (%d) for path '%s'",
+                     dmb_ret.code, path);
+        return dmb_ret.code;
     }
 
+    char file_basename[MAX_PATH_LEN];
+    memset(file_basename, 0, MAX_PATH_LEN);
+    const char *b = get_basename(path);
+    if (!b) {
+        R2F2_LOG_ERR("could not get basename for path '%s'", path);
+        return RET_ERR;
+    }
     /*
-     * look for the file
-     * if it exists, open and return fd
-     * if it doesn't exist, check oflags for O_CREAT and create file
-     * otherwise, error
+     * make sure to also copy '\0' terminator, important in case we don't have a
+     * zeroed buffer at some point
      */
+    memcpy(file_basename, b, strlen(b) + 1);
 
-    RESULT(block_idx) fib_ret = r2f2_find_file_indir_block(fs, path);
-    if (fib_ret.code == RET_FILE_NOT_FOUND) {
-        if (creat) {
-            r2f2_ret ret = r2f2_register_file(fs, path, fd.code);
-            if (ret != RET_OK) {
-                R2F2_LOG_ERR("file '%s' creation failed (%d)", path, ret);
-                return ret;
-            }
-        } else {
-            R2F2_LOG_ERR("file '%s' doesn't exist. O_CREAT=%s", path,
-                         creat ? "y" : "n");
-            return RET_ERR;
-        }
-    } else if (fib_ret.code != RET_OK) {
-        return fib_ret.code;
-    }
-
-    if (!creat) {
-        RESULT(uint32_t) last_fie =
-            get_last_file_indir_entry(fs, fib_ret.value);
-        if (last_fie.code != RET_OK) {
-            return last_fie.code;
-        }
-
-        file_indir_entry_t fie;
-        r2f2_ret ret =
-            read_file_indir_entry(fs, fib_ret.value, last_fie.value, &fie);
+    dir_meta_entry_t dme;
+    uint32_t dme_idx = NUM_DIR_META_ENTRIES;
+    for (size_t i = 0; i < NUM_DIR_META_ENTRIES; i++) {
+        r2f2_ret ret = read_dir_meta_entry(fs, dmb_ret.value, i, &dme);
         if (ret != RET_OK) {
             return ret;
         }
 
-        RESULT(block_idx) seq_block = get_valid_next_block(fs, fie.seq_block);
-        if (seq_block.code != RET_OK) {
-            return seq_block.code;
+        if (memcmp(dme.path, file_basename, MAX_PATH_LEN) == 0) {
+            dme_idx = i;
+            break;
         }
-        RESULT(uint32_t) last_fse =
-            get_last_file_seq_entry(fs, seq_block.value);
+    }
+
+    if (dme_idx < NUM_DIR_META_ENTRIES) {
+        /* file exists already */
+        RESULT(block_idx) next_block = get_valid_next_block(fs, dme.next_block);
+        if (next_block.code != RET_OK) {
+            return next_block.code;
+        }
+
+        block_idx indir_block_idx = 0;
+        block_idx seq_block_idx = 0;
 
         /*
+         * The dir_meta_entry could point directly to a file_seq_block, or do so
+         * via a file_indir_block, and the flags tell us how it is.
+         */
+        if (is_entry_indirect(dme.f)) {
+            indir_block_idx = next_block.value;
+            RESULT(uint32_t) last_fie =
+                get_last_file_indir_entry(fs, indir_block_idx);
+            if (last_fie.code != RET_OK) {
+                return last_fie.code;
+            }
+
+            file_indir_entry_t fie;
+            r2f2_ret ret = read_file_indir_entry(fs, indir_block_idx,
+                                                 last_fie.value, &fie);
+            if (ret != RET_OK) {
+                return ret;
+            }
+
+            RESULT(block_idx) seq_block =
+                get_valid_next_block(fs, fie.seq_block);
+            if (seq_block.code != RET_OK) {
+                return seq_block.code;
+            }
+        } else {
+            seq_block_idx = next_block.value;
+        }
+
+        RESULT(uint32_t) last_fse = get_last_file_seq_entry(fs, seq_block_idx);
+        /*
          * Our file already existed, so the last file_seq_entry normally
-         * contains the information we need. However, if the file was freshly
-         * created and has no contents yet, we don't even have such an entry
-         * yet.
+         * contains the information we need. However, if the file was
+         * freshly created and has no contents yet, we don't even have such
+         * an entry yet.
          */
 
         if (last_fse.code == RET_NOT_FOUND) {
+            RESULT(r2f2_fd) fd = r2f2_create_fd(fs, path);
+            if (fd.code != RET_OK) {
+                R2F2_LOG_ERR("failed (%d) to create fd for path '%s'", fd.code,
+                             path);
+                return fd.code;
+            }
             fildes_t *f = &fs->fds[fd.value];
             f->file_offset = 0;
             f->file_size = 0;
-            f->file_indir_block = fib_ret.value;
-            f->last_seq_block = seq_block.value;
-            f->next_seq_entry_idx = 0;
-            f->last_data_block = 0;
-            f->last_data_block_fill = 0;
+            f->meta.dir.block = dmb_ret.value;
+            f->meta.dir.entry = dme_idx;
+            f->meta.indir.block = indir_block_idx;
+            f->meta.seq.last_block = seq_block_idx;
+            f->meta.seq.next_entry = 0;
+            f->meta.data.last_block = 0;
+            f->meta.data.last_block_fill = 0;
             return fd.value;
         } else if (last_fse.code != RET_OK) {
             return last_fse.code;
         }
 
+        /* we do have a file_seq_entry already */
+
         file_seq_entry_t fse;
-        ret = read_file_seq_entry(fs, seq_block.value, last_fse.value, &fse);
+        r2f2_ret ret =
+            read_file_seq_entry(fs, seq_block_idx, last_fse.value, &fse);
         if (ret != RET_OK) {
             return ret;
         }
 
+        RESULT(r2f2_fd) fd = r2f2_create_fd(fs, path);
+        if (fd.code != RET_OK) {
+            R2F2_LOG_ERR("failed (%d) to create fd for path '%s'", fd.code,
+                         path);
+            return fd.code;
+        }
         fildes_t *f = &fs->fds[fd.value];
         f->file_offset = 0;
         f->file_size = fse.current_file_size;
-        f->file_indir_block = fib_ret.value;
-        f->last_seq_block = seq_block.value;
-        f->next_seq_entry_idx = last_fse.value + 1;
-        f->last_data_block = fse.data_block;
-        f->last_data_block_fill = fse.data_block_fill_level;
+
+        f->meta.dir.block = dmb_ret.value;
+        f->meta.dir.entry = dme_idx;
+        f->meta.indir.block = indir_block_idx;
+        f->meta.seq.last_block = seq_block_idx;
+        f->meta.seq.next_entry = last_fse.value + 1;
+        f->meta.data.last_block = fse.data_block;
+        f->meta.data.last_block_fill = fse.data_block_fill_level;
+    } else if (creat) {
+        /* file doesn't exist but we're supposed to create it */
+        RESULT(r2f2_fd) fd = r2f2_register_file(fs, path);
+        if (fd.code != RET_OK) {
+            R2F2_LOG_ERR("file '%s' creation failed (%d)", path, fd.code);
+            return fd.code;
+        }
+        return fd.value;
     }
-    return fd.value;
+
+    R2F2_LOG_ERR("file '%s' doesn't exist. O_CREAT=%s", path,
+                 creat ? "y" : "n");
+    return RET_ERR;
 }
 
 r2f2_ret r2f2_close(r2f2_fs_t *fs, r2f2_fd fd) {
@@ -227,8 +280,17 @@ ssize_t r2f2_read(r2f2_fs_t *fs, r2f2_fd fd, void *buf, size_t count) {
     size_t can_read_from_storage = f->file_size - f->file_offset;
     if (can_read_from_storage >= count) {
         /* we have to find the appropriate data block to read from */
-        RESULT(uint32_t) b =
-            find_data_block_for_off(fs, f->file_indir_block, f->file_offset);
+        RESULT(block_idx) b;
+        if (f->meta.indir.block != 0) {
+            b = find_data_block_for_off(fs, f->meta.indir.block,
+                                        f->file_offset);
+        } else if (f->meta.seq.last_block != 0) {
+            b = find_data_block_for_off_direct(fs, f->meta.seq.last_block,
+                                               f->file_offset);
+        } else {
+            b = RESULT_ERR(block_idx, RET_ERR);
+        }
+
         if (b.code != RET_OK) {
             return b.code;
         }
@@ -312,18 +374,18 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
     }
 
     /* do we even have a data block yet? */
-    if (f->last_data_block == 0) {
+    if (f->meta.data.last_block == 0) {
         RESULT(block_idx) data_block_idx = allocate_block(fs);
         if (data_block_idx.code != RET_OK) {
             return data_block_idx.code;
         }
-        f->last_data_block = data_block_idx.value;
+        f->meta.data.last_block = data_block_idx.value;
     }
 
     size_t total_written = 0;
     while (total_written < f->block_buffer.count) {
         size_t last_data_block_cap =
-            fs->cfg->geom.block_size - f->last_data_block_fill;
+            fs->cfg->geom.block_size - f->meta.data.last_block_fill;
 
         if (last_data_block_cap == 0) {
             RESULT(block_idx) b = allocate_block(fs);
@@ -331,8 +393,8 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
                 return b.code;
             }
 
-            f->last_data_block = b.value;
-            f->last_data_block_fill = 0;
+            f->meta.data.last_block = b.value;
+            f->meta.data.last_block_fill = 0;
             last_data_block_cap = fs->cfg->geom.block_size;
         }
 
@@ -342,59 +404,69 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
                     "%zu");
         r2f2_ret ret = fs->cfg->flash_write(
             fs,
-            f->last_data_block * fs->cfg->geom.block_size +
-                f->last_data_block_fill,
+            f->meta.data.last_block * fs->cfg->geom.block_size +
+                f->meta.data.last_block_fill,
             to_write, f->block_buffer.data + total_written);
         if (ret != RET_OK) {
             R2F2_LOG_ERR("failed (%d) to write %zu B to flash in block %u", ret,
-                         to_write, f->last_data_block);
+                         to_write, f->meta.data.last_block);
             return ret;
         }
 
         /* update file information in fd and "empty" its block buffer */
-        f->last_data_block_fill += to_write;
+        f->meta.data.last_block_fill += to_write;
         f->file_size += to_write;
         f->block_buffer.count -= to_write;
 
         /* we've written our data, time for the necessary metadata */
 
-        if (f->next_seq_entry_idx >= NUM_FILE_SEQ_ENTRIES) {
-            RESULT(block_idx) b = allocate_block(fs);
-            if (b.code != RET_OK) {
-                return b.code;
+        if (f->meta.seq.next_entry >= NUM_FILE_SEQ_ENTRIES) {
+            if (f->meta.indir.block == 0) {
+                /* we didn't have a file_indir_block yet, but now we need one */
+                r2f2_ret ret = r2f2_migrate_file_to_indir_block(fs, fd);
+                if (ret != RET_OK) {
+                    return ret;
+                }
             }
-            f->last_seq_block = b.value;
-            f->next_seq_entry_idx = 0;
 
-            RESULT(uint32_t) new_indir_entry =
-                get_free_file_indir_entry(fs, f->file_indir_block);
-            if (new_indir_entry.code != RET_OK) {
-                return new_indir_entry.code;
+            RESULT(block_idx) seq_block_idx = allocate_block(fs);
+            if (seq_block_idx.code != RET_OK) {
+                return seq_block_idx.code;
+            }
+
+            RESULT(uint32_t) new_indir_entry_num =
+                get_free_file_indir_entry(fs, f->meta.indir.block);
+            if (new_indir_entry_num.code != RET_OK) {
+                return new_indir_entry_num.code;
             }
 
             file_indir_entry_t fie;
-            fie.seq_block[0] = b.value;
+            memset(fie.seq_block, 0xFF, sizeof(fie.seq_block));
+            fie.seq_block[0] = seq_block_idx.value;
             mark_entry_used(&fie.f);
 
             r2f2_ret ie_ret = write_file_indir_entry(
-                fs, f->file_indir_block, new_indir_entry.value, &fie);
+                fs, f->meta.indir.block, new_indir_entry_num.value, &fie);
 
             if (ie_ret != RET_OK) {
                 return ie_ret;
             }
             mark_entry_committed(&fie.f);
-            ie_ret = write_file_indir_entry_flags(fs, f->file_indir_block,
-                                                  new_indir_entry.value, &fie);
+            ie_ret = write_file_indir_entry_flags(
+                fs, f->meta.indir.block, new_indir_entry_num.value, &fie.f);
             if (ie_ret != RET_OK) {
                 return ie_ret;
             }
+
+            f->meta.seq.last_block = seq_block_idx.value;
+            f->meta.seq.next_entry = 0;
         }
 
         file_seq_entry_t fse;
         memset(&fse, 0xFF, sizeof(file_seq_entry_t));
 
-        fse.data_block = f->last_data_block;
-        fse.data_block_fill_level = f->last_data_block_fill;
+        fse.data_block = f->meta.data.last_block;
+        fse.data_block_fill_level = f->meta.data.last_block_fill;
         R2F2_ASSERT(f->file_size, >, 0, "%zu");
         fse.data_block_offset_in_file =
             fs->cfg->geom.block_size *
@@ -403,14 +475,14 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
         mark_entry_used(&fse.f);
 
         /* write the entry, then persist via flags */
-        write_file_seq_entry(fs, f->last_seq_block, f->next_seq_entry_idx,
+        write_file_seq_entry(fs, f->meta.seq.last_block, f->meta.seq.next_entry,
                              &fse);
 
         mark_entry_committed(&fse.f);
-        write_file_seq_entry_flags(fs, f->last_seq_block, f->next_seq_entry_idx,
-                                   &fse.f);
+        write_file_seq_entry_flags(fs, f->meta.seq.last_block,
+                                   f->meta.seq.next_entry, &fse.f);
 
-        f->next_seq_entry_idx++;
+        f->meta.seq.next_entry++;
 
         total_written += to_write;
     }

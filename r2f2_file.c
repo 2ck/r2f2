@@ -116,6 +116,70 @@ RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path) {
     return RESULT_OK(block_idx, current_block);
 }
 
+r2f2_ret r2f2_migrate_file_to_indir_block(r2f2_fs_t *fs, r2f2_fd fd) {
+    R2F2_FD_VALID_CHECK(fs, fd);
+
+    fildes_t *f = &fs->fds[fd];
+
+    RESULT(block_idx) indir_block_idx = allocate_block(fs);
+    if (indir_block_idx.code != RET_OK) {
+        return indir_block_idx.code;
+    }
+
+    /* create initial indir_entry in our new indir_block */
+
+    file_indir_entry_t fie;
+    memset(fie.seq_block, 0xFF, sizeof(fie.seq_block));
+    fie.seq_block[0] = f->meta.seq.last_block;
+    mark_entry_used(&fie.f);
+    r2f2_ret ie_ret =
+        write_file_indir_entry(fs, indir_block_idx.value, 0, &fie);
+
+    if (ie_ret != RET_OK) {
+        return ie_ret;
+    }
+    mark_entry_committed(&fie.f);
+    ie_ret = write_file_indir_entry_flags(fs, indir_block_idx.value, 0, &fie.f);
+    if (ie_ret != RET_OK) {
+        return ie_ret;
+    }
+
+    /* update our dir_meta_entry */
+
+    dir_meta_entry_t dme;
+    r2f2_ret dme_ret =
+        read_dir_meta_entry(fs, f->meta.dir.block, f->meta.dir.entry, &dme);
+    if (dme_ret != RET_OK) {
+        return dme_ret;
+    }
+
+    uint32_t free_next_ptr = NUM_NEXT_PTRS;
+    for (size_t i = 0; i < NUM_NEXT_PTRS; i++) {
+        if (dme.next_block[i] >= fs->cfg->geom.num_blocks) {
+            free_next_ptr = i;
+            break;
+        }
+    }
+    if (free_next_ptr == NUM_NEXT_PTRS) {
+        R2F2_LOG_ERR("unhandled (TODO), out of next_block ptrs, "
+                     "need new dir_entry for file '%s'",
+                     f->path);
+        return RET_ERR;
+    }
+    dme.next_block[free_next_ptr] = indir_block_idx.value;
+    mark_entry_indirect(&dme.f);
+
+    dme_ret =
+        write_dir_meta_entry(fs, f->meta.dir.block, f->meta.dir.entry, &dme);
+    if (dme_ret != RET_OK) {
+        return dme_ret;
+    }
+
+    f->meta.indir.block = indir_block_idx.value;
+
+    return RET_OK;
+}
+
 RESULT(block_idx) r2f2_find_file_indir_block(r2f2_fs_t *fs, const char *path) {
     RESULT(block_idx) ret = r2f2_find_dir_meta_block(fs, path);
     if (ret.code != RET_OK) {
@@ -152,12 +216,12 @@ RESULT(block_idx) r2f2_find_file_indir_block(r2f2_fs_t *fs, const char *path) {
     return RESULT_ERR(block_idx, RET_FILE_NOT_FOUND);
 }
 
-r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path, r2f2_fd fd) {
+RESULT(r2f2_fd) r2f2_register_file(r2f2_fs_t *fs, const char *path) {
     RESULT(block_idx) dir_meta_block_idx = r2f2_find_dir_meta_block(fs, path);
     if (dir_meta_block_idx.code != RET_OK) {
         R2F2_LOG_ERR("dir traversal failed (%d) for path '%s'",
                      dir_meta_block_idx.code, path);
-        return dir_meta_block_idx.code;
+        return RESULT_ERR(r2f2_fd, dir_meta_block_idx.code);
     }
 
     RESULT(uint32_t) dme_num =
@@ -166,24 +230,19 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path, r2f2_fd fd) {
         R2F2_LOG_WARN(
             "TODO (unhandled): failed (%d) to get dir_entry in block %u",
             dme_num.code, dir_meta_block_idx.value);
-        return dme_num.code;
+        return RESULT_ERR(r2f2_fd, dme_num.code);
     }
 
     /*
-     * We allocate a file_seq_block, but no data_block. Then we allocate a
-     * file_indir_block, create the file_indir_entry pointing to our
-     * file_seq_block. Finally, our dir_meta_entry points to the
-     * file_indir_block.
+     * We allocate a file_seq_block, but no data_block. Then we let our
+     * dir_meta_entry directly point to the file_seq_block. A file_indir_block
+     * is only inserted inbetween at a later point, when the file_seq_block is
+     * full.
      *
      * ┌─────────┐
      * │dir_block│
      * │entry ─┐ │
      * └───────┼─┘
-     *         │
-     * ┌───────▼────────┐
-     * │file_indir_block│
-     * │entry ─┐        │
-     * └───────┼────────┘
      *         │
      * ┌───────▼──────┐
      * │file_seq_block│
@@ -192,22 +251,7 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path, r2f2_fd fd) {
 
     RESULT(block_idx) file_seq_block_idx = allocate_block(fs);
     if (file_seq_block_idx.code != RET_OK) {
-        return file_seq_block_idx.code;
-    }
-
-    file_indir_entry_t fie;
-    memset(fie.seq_block, 0xFF, sizeof(fie.seq_block));
-    fie.seq_block[0] = file_seq_block_idx.value;
-    mark_entry_used(&fie.f);
-
-    RESULT(block_idx) file_indir_block_idx = allocate_block(fs);
-    if (file_indir_block_idx.code != RET_OK) {
-        return file_indir_block_idx.code;
-    }
-    r2f2_ret ret =
-        write_file_indir_entry(fs, file_indir_block_idx.value, 0, &fie);
-    if (ret != RET_OK) {
-        return ret;
+        return RESULT_ERR(r2f2_fd, file_seq_block_idx.code);
     }
 
     dir_meta_entry_t dme;
@@ -217,7 +261,7 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path, r2f2_fd fd) {
     const char *b = get_basename(path);
     if (!b) {
         R2F2_LOG_ERR("could not get basename for path '%s'", path);
-        return RET_ERR;
+        return RESULT_ERR(r2f2_fd, RET_ERR);
     }
     /*
      * make sure to also copy '\0' terminator, important in case we don't have a
@@ -226,41 +270,42 @@ r2f2_ret r2f2_register_file(r2f2_fs_t *fs, const char *path, r2f2_fd fd) {
     memcpy(dme.path, b, strlen(b) + 1);
 
     memset(dme.next_block, 0xFF, sizeof(dme.next_block));
-    dme.next_block[0] = file_indir_block_idx.value;
+    dme.next_block[0] = file_seq_block_idx.value;
 
     mark_entry_used(&dme.f);
 
-    ret =
+    r2f2_ret ret =
         write_dir_meta_entry(fs, dir_meta_block_idx.value, dme_num.value, &dme);
     if (ret != RET_OK) {
-        return ret;
+        return RESULT_ERR(r2f2_fd, ret);
     }
 
-    /* commit, starting from the leaf to the root */
-    mark_entry_committed(&fie.f);
-    ret =
-        write_file_indir_entry_flags(fs, file_indir_block_idx.value, 0, &fie.f);
-    if (ret != RET_OK) {
-        return ret;
-    }
     mark_entry_committed(&dme.f);
     ret = write_dir_meta_entry_flags(fs, dir_meta_block_idx.value,
                                      dme_num.value, &dme.f);
     if (ret != RET_OK) {
-        return ret;
+        return RESULT_ERR(r2f2_fd, ret);
     }
 
-    fildes_t *f = &fs->fds[fd];
+    RESULT(r2f2_fd) fd = r2f2_create_fd(fs, path);
+    if (fd.code != RET_OK) {
+        R2F2_LOG_ERR("failed (%d) to create fd for path '%s'", fd.code, path);
+        return fd;
+    }
+    fildes_t *f = &fs->fds[fd.value];
     f->file_offset = 0;
     f->file_size = 0;
-    f->file_indir_block = file_indir_block_idx.value;
-    f->last_seq_block = file_seq_block_idx.value;
-    f->next_seq_entry_idx = 0;
+    f->meta.dir.block = dir_meta_block_idx.value;
+    f->meta.dir.entry = dme_num.value;
+    /* no indir block so far */
+    f->meta.indir.block = 0;
+    f->meta.seq.last_block = file_seq_block_idx.value;
+    f->meta.seq.next_entry = 0;
     /* no data block so far */
-    f->last_data_block = 0;
-    f->last_data_block_fill = 0;
+    f->meta.data.last_block = 0;
+    f->meta.data.last_block_fill = 0;
 
-    return RET_OK;
+    return fd;
 }
 
 RESULT(r2f2_fd) r2f2_create_fd(r2f2_fs_t *fs, const char *path) {
