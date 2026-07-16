@@ -55,7 +55,7 @@ bool is_entry_indirect(entry_flags_t f) {
 }
 
 r2f2_ret read_dir_meta_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                             void *buf) {
+                             dir_meta_entry_t *buf) {
     if (b > fs->cfg->geom.num_blocks || idx > NUM_DIR_META_ENTRIES) {
         R2F2_LOG_ERR("out of bounds block %u or entry %u", b, idx);
         return RET_OOB;
@@ -69,13 +69,12 @@ r2f2_ret read_dir_meta_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
     if (ret != RET_OK) {
         R2F2_LOG_ERR(
             "failed (%d) to read dir_meta_entry %u in block %u, buf %p", ret,
-            idx, b, buf);
+            idx, b, (void *)buf);
     }
     return ret;
 }
-
 r2f2_ret write_dir_meta_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                              void *buf) {
+                              dir_meta_entry_t *buf) {
     if (b > fs->cfg->geom.num_blocks || idx > NUM_DIR_META_ENTRIES) {
         R2F2_LOG_ERR("out of bounds block %u or entry %u", b, idx);
         return RET_OOB;
@@ -89,13 +88,31 @@ r2f2_ret write_dir_meta_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
     if (ret != RET_OK) {
         R2F2_LOG_ERR(
             "failed (%d) to write dir_meta_entry %u in block %u, buf %p", ret,
-            idx, b, buf);
+            idx, b, (void *)buf);
     }
     return ret;
 }
+r2f2_ret read_dir_meta_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
+                                   entry_flags_t *buf) {
+    if (b > fs->cfg->geom.num_blocks || idx > NUM_DIR_META_ENTRIES) {
+        R2F2_LOG_ERR("out of bounds block %u or entry %u", b, idx);
+        return RET_OOB;
+    }
 
+    r2f2_ret ret = fs->cfg->flash_read(
+        fs,
+        b * fs->cfg->geom.block_size + offsetof(dir_meta_block_t, entries) +
+            offsetof(dir_meta_entry_t, f) + idx * sizeof(dir_meta_entry_t),
+        sizeof(entry_flags_t), buf);
+    if (ret != RET_OK) {
+        R2F2_LOG_ERR(
+            "failed (%d) to read dir_meta_entry %u flags in block %u, buf %p",
+            ret, idx, b, (void *)buf);
+    }
+    return ret;
+}
 r2f2_ret write_dir_meta_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                                    void *buf) {
+                                    entry_flags_t *buf) {
     if (b > fs->cfg->geom.num_blocks || idx > NUM_DIR_META_ENTRIES) {
         R2F2_LOG_ERR("out of bounds block %u or entry %u", b, idx);
         return RET_OOB;
@@ -109,13 +126,13 @@ r2f2_ret write_dir_meta_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
     if (ret != RET_OK) {
         R2F2_LOG_ERR(
             "failed (%d) to write dir_meta_entry %u flags in block %u, buf %p",
-            ret, idx, b, buf);
+            ret, idx, b, (void *)buf);
     }
     return ret;
 }
 
 r2f2_ret read_file_indir_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                               void *buf) {
+                               file_indir_entry_t *buf) {
     if (b > fs->cfg->geom.num_blocks || idx > NUM_FILE_INDIR_ENTRIES) {
         R2F2_LOG_ERR("out of bounds block %u or entry %u", b, idx);
         return RET_OOB;
@@ -137,12 +154,12 @@ r2f2_ret read_file_indir_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
     if (ret != RET_OK) {
         R2F2_LOG_ERR(
             "failed (%d) to read file_indir_entry %u in block %u, buf %p", ret,
-            idx, b, buf);
+            idx, b, (void *)buf);
     }
     return ret;
 }
 r2f2_ret write_file_indir_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                                void *buf) {
+                                file_indir_entry_t *buf) {
     if (b > fs->cfg->geom.num_blocks || idx > NUM_FILE_INDIR_ENTRIES) {
         R2F2_LOG_ERR("out of bounds block %u or entry %u", b, idx);
         return RET_OOB;
@@ -165,12 +182,12 @@ r2f2_ret write_file_indir_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
     if (ret != RET_OK) {
         R2F2_LOG_ERR(
             "failed (%d) to write file_indir_entry %u in block %u, buf %p", ret,
-            idx, b, buf);
+            idx, b, (void *)buf);
     }
     return ret;
 }
 r2f2_ret read_file_indir_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                                     void *buf) {
+                                     entry_flags_t *buf) {
     if (b > fs->cfg->geom.num_blocks || idx > NUM_FILE_INDIR_ENTRIES) {
         R2F2_LOG_ERR("out of bounds block %u or entry %u", b, idx);
         return RET_OOB;
@@ -184,12 +201,12 @@ r2f2_ret read_file_indir_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
     if (ret != RET_OK) {
         R2F2_LOG_ERR("failed (%d) to read file_indir_entry %u flags in block "
                      "%u, buf %p",
-                     ret, idx, b, buf);
+                     ret, idx, b, (void *)buf);
     }
     return ret;
 }
 r2f2_ret write_file_indir_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                                      void *buf) {
+                                      entry_flags_t *buf) {
     if (b > fs->cfg->geom.num_blocks || idx > NUM_FILE_INDIR_ENTRIES) {
         R2F2_LOG_ERR("out of bounds block %u or entry %u", b, idx);
         return RET_OOB;
@@ -203,13 +220,13 @@ r2f2_ret write_file_indir_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
     if (ret != RET_OK) {
         R2F2_LOG_ERR("failed (%d) to write file_indir_entry %u flags in block "
                      "%u, buf %p",
-                     ret, idx, b, buf);
+                     ret, idx, b, (void *)buf);
     }
     return ret;
 }
 
 r2f2_ret read_file_seq_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                             void *buf) {
+                             file_seq_entry_t *buf) {
     if (b > fs->cfg->geom.num_blocks || idx > NUM_FILE_SEQ_ENTRIES) {
         R2F2_LOG_ERR("out of bounds block %u or entry %u", b, idx);
         return RET_OOB;
@@ -223,12 +240,12 @@ r2f2_ret read_file_seq_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
     if (ret != RET_OK) {
         R2F2_LOG_ERR(
             "failed (%d) to read file_seq_entry %u in block %u, buf %p", ret,
-            idx, b, buf);
+            idx, b, (void *)buf);
     }
     return ret;
 }
 r2f2_ret write_file_seq_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                              void *buf) {
+                              file_seq_entry_t *buf) {
     if (b > fs->cfg->geom.num_blocks || idx > NUM_FILE_SEQ_ENTRIES) {
         R2F2_LOG_ERR("out of bounds block %u or entry %u", b, idx);
         return RET_OOB;
@@ -242,12 +259,12 @@ r2f2_ret write_file_seq_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
     if (ret != RET_OK) {
         R2F2_LOG_ERR(
             "failed (%d) to write file_seq_entry %u in block %u, buf %p", ret,
-            idx, b, buf);
+            idx, b, (void *)buf);
     }
     return ret;
 }
 r2f2_ret read_file_seq_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                                   void *buf) {
+                                   entry_flags_t *buf) {
     if (b > fs->cfg->geom.num_blocks || idx > NUM_FILE_SEQ_ENTRIES) {
         R2F2_LOG_ERR("out of bounds block %u or entry %u", b, idx);
         return RET_OOB;
@@ -261,12 +278,12 @@ r2f2_ret read_file_seq_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
     if (ret != RET_OK) {
         R2F2_LOG_ERR(
             "failed (%d) to read file_seq_entry %u flags in block %u, buf %p",
-            ret, idx, b, buf);
+            ret, idx, b, (void *)buf);
     }
     return ret;
 }
 r2f2_ret write_file_seq_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                                    void *buf) {
+                                    entry_flags_t *buf) {
     if (b > fs->cfg->geom.num_blocks || idx > NUM_FILE_SEQ_ENTRIES) {
         R2F2_LOG_ERR("out of bounds block %u or entry %u", b, idx);
         return RET_OOB;
@@ -280,7 +297,7 @@ r2f2_ret write_file_seq_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
     if (ret != RET_OK) {
         R2F2_LOG_ERR(
             "failed (%d) to write file_seq_entry %u flags in block %u, buf %p",
-            ret, idx, b, buf);
+            ret, idx, b, (void *)buf);
     }
     return ret;
 }

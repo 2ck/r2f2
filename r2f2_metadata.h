@@ -111,29 +111,31 @@ bool is_entry_used(entry_flags_t f);
 bool is_entry_indirect(entry_flags_t f);
 
 r2f2_ret read_dir_meta_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                             void *buf);
+                             dir_meta_entry_t *buf);
 r2f2_ret write_dir_meta_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                              void *buf);
+                              dir_meta_entry_t *buf);
+r2f2_ret read_dir_meta_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
+                                    entry_flags_t *buf);
 r2f2_ret write_dir_meta_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                                    void *buf);
+                                    entry_flags_t *buf);
 
 r2f2_ret read_file_indir_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                               void *buf);
+                               file_indir_entry_t *buf);
 r2f2_ret write_file_indir_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                                void *buf);
+                                file_indir_entry_t *buf);
 r2f2_ret read_file_indir_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                                     void *buf);
+                                     entry_flags_t *buf);
 r2f2_ret write_file_indir_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                                      void *buf);
+                                      entry_flags_t *buf);
 
 r2f2_ret read_file_seq_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                             void *buf);
+                             file_seq_entry_t *buf);
 r2f2_ret write_file_seq_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                              void *buf);
+                              file_seq_entry_t *buf);
 r2f2_ret read_file_seq_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                                   void *buf);
+                                   entry_flags_t *buf);
 r2f2_ret write_file_seq_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                                    void *buf);
+                                    entry_flags_t *buf);
 
 bool is_fs_valid(r2f2_fs_t *fs, r2f2_fs_info_t *fs_info);
 
