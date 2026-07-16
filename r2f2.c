@@ -74,41 +74,11 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
         return RET_ERR;
     }
 
-    RESULT(block_idx) dmb_ret = r2f2_find_dir_meta_block(fs, path);
-    if (dmb_ret.code != RET_OK) {
-        R2F2_LOG_ERR("traversal to dir_meta_block failed (%d) for path '%s'",
-                     dmb_ret.code, path);
-        return dmb_ret.code;
-    }
-
-    char file_basename[MAX_PATH_LEN];
-    memset(file_basename, 0, MAX_PATH_LEN);
-    const char *b = get_basename(path);
-    if (!b) {
-        R2F2_LOG_ERR("could not get basename for path '%s'", path);
-        return RET_ERR;
-    }
-    /*
-     * make sure to also copy '\0' terminator, important in case we don't have a
-     * zeroed buffer at some point
-     */
-    memcpy(file_basename, b, strlen(b) + 1);
-
     dir_meta_entry_t dme;
-    uint32_t dme_idx = NUM_DIR_META_ENTRIES;
-    for (size_t i = 0; i < NUM_DIR_META_ENTRIES; i++) {
-        r2f2_ret ret = read_dir_meta_entry(fs, dmb_ret.value, i, &dme);
-        if (ret != RET_OK) {
-            return ret;
-        }
+    struct dir_traversal_ret dir_ret;
+    r2f2_ret ret = r2f2_get_file_dir_entry(fs, path, &dme, &dir_ret);
 
-        if (memcmp(dme.path, file_basename, MAX_PATH_LEN) == 0) {
-            dme_idx = i;
-            break;
-        }
-    }
-
-    if (dme_idx < NUM_DIR_META_ENTRIES) {
+    if (ret == RET_OK) {
         /* file exists already */
         RESULT(block_idx) next_block = get_valid_next_block(fs, dme.next_block);
         if (next_block.code != RET_OK) {
@@ -165,8 +135,8 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
             fildes_t *f = &fs->fds[fd.value];
             f->file_offset = 0;
             f->file_size = 0;
-            f->meta.dir.block = dmb_ret.value;
-            f->meta.dir.entry = dme_idx;
+            f->meta.dir.block = dir_ret.dmb_idx;
+            f->meta.dir.entry = dir_ret.dme_idx;
             f->meta.indir.block = indir_block_idx;
             f->meta.seq.last_block = seq_block_idx;
             f->meta.seq.next_entry = 0;
@@ -196,8 +166,8 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
         f->file_offset = 0;
         f->file_size = fse.current_file_size;
 
-        f->meta.dir.block = dmb_ret.value;
-        f->meta.dir.entry = dme_idx;
+        f->meta.dir.block = dir_ret.dmb_idx;
+        f->meta.dir.entry = dir_ret.dme_idx;
         f->meta.indir.block = indir_block_idx;
         f->meta.seq.last_block = seq_block_idx;
         f->meta.seq.next_entry = last_fse.value + 1;
@@ -205,7 +175,7 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
         f->meta.data.last_block_fill = fse.data_block_fill_level;
 
         return fd.value;
-    } else if (creat) {
+    } else if (ret == RET_NOT_FOUND && creat) {
         /* file doesn't exist but we're supposed to create it */
         RESULT(r2f2_fd) fd = r2f2_register_file(fs, path);
         if (fd.code != RET_OK) {
@@ -492,4 +462,22 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
     }
 
     return RET_OK;
+}
+
+r2f2_ret r2f2_remove(r2f2_fs_t *fs, const char *path) {
+    if (!path) {
+        return RET_EINVAL;
+    }
+
+    dir_meta_entry_t dme;
+    struct dir_traversal_ret dir_ret;
+    r2f2_ret ret = r2f2_get_file_dir_entry(fs, path, &dme, &dir_ret);
+    if (ret != RET_OK) {
+        return ret;
+    }
+
+    mark_entry_reclaimable(&dme.f);
+    ret = write_dir_meta_entry_flags(fs, dir_ret.dmb_idx, dir_ret.dme_idx,
+                                     &dme.f);
+    return ret;
 }

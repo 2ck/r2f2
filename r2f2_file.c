@@ -100,6 +100,7 @@ RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path) {
                 }
                 current_block = next_block.value;
                 found_entry = true;
+                break;
             }
         }
 
@@ -178,42 +179,6 @@ r2f2_ret r2f2_migrate_file_to_indir_block(r2f2_fs_t *fs, r2f2_fd fd) {
     f->meta.indir.block = indir_block_idx.value;
 
     return RET_OK;
-}
-
-RESULT(block_idx) r2f2_find_file_indir_block(r2f2_fs_t *fs, const char *path) {
-    RESULT(block_idx) ret = r2f2_find_dir_meta_block(fs, path);
-    if (ret.code != RET_OK) {
-        R2F2_LOG_ERR("traversal to dir_meta_block failed (%d) for path '%s'",
-                     ret.code, path);
-        return ret;
-    }
-
-    block_idx dir_meta_block_idx = ret.value;
-
-    char file_basename[MAX_PATH_LEN];
-    memset(file_basename, 0, MAX_PATH_LEN);
-    const char *b = get_basename(path);
-    if (!b) {
-        R2F2_LOG_ERR("could not get basename for path '%s'", path);
-        return RESULT_ERR(block_idx, RET_ERR);
-    }
-    /*
-     * make sure to also copy '\0' terminator, important in case we don't have a
-     * zeroed buffer at some point
-     */
-    memcpy(file_basename, b, strlen(b) + 1);
-
-    dir_meta_entry_t dme;
-    for (size_t i = 0; i < NUM_DIR_META_ENTRIES; i++) {
-        read_dir_meta_entry(fs, dir_meta_block_idx, i, &dme);
-        if (memcmp(dme.path, file_basename, MAX_PATH_LEN) == 0) {
-            RESULT(block_idx) next_block =
-                get_valid_next_block(fs, dme.next_block);
-            return next_block;
-        }
-    }
-
-    return RESULT_ERR(block_idx, RET_FILE_NOT_FOUND);
 }
 
 RESULT(r2f2_fd) r2f2_register_file(r2f2_fs_t *fs, const char *path) {

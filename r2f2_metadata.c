@@ -38,6 +38,10 @@ void mark_entry_used(entry_flags_t *f) {
     *f &= ~ENTRY_USED_MASK;
 }
 
+void mark_entry_reclaimable(entry_flags_t *f) {
+    *f &= ~ENTRY_RECLAIMABLE_MASK;
+}
+
 void mark_entry_indirect(entry_flags_t *f) {
     *f &= ~ENTRY_INDIRECT_MASK;
 }
@@ -48,6 +52,10 @@ bool is_entry_committed(entry_flags_t f) {
 
 bool is_entry_used(entry_flags_t f) {
     return (f & ENTRY_USED_MASK) == 0;
+}
+
+bool is_entry_reclaimable(entry_flags_t f) {
+    return (f & ENTRY_RECLAIMABLE_MASK) == 0;
 }
 
 bool is_entry_indirect(entry_flags_t f) {
@@ -518,6 +526,61 @@ RESULT(block_idx) find_data_block_for_off_direct(r2f2_fs_t *fs,
                  "find correct entries",
                  expected_seq_entry);
     return RESULT_ERR(block_idx, RET_NOT_FOUND);
+}
+
+r2f2_ret r2f2_get_file_dir_entry(r2f2_fs_t *fs, const char *path,
+                                 dir_meta_entry_t *buf,
+                                 struct dir_traversal_ret *ret) {
+    RESULT(block_idx) dmb_ret = r2f2_find_dir_meta_block(fs, path);
+    if (dmb_ret.code != RET_OK) {
+        R2F2_LOG_ERR("traversal to dir_meta_block failed (%d) for path '%s'",
+                     dmb_ret.code, path);
+        return dmb_ret.code;
+    }
+
+    ret->dmb_idx = dmb_ret.value;
+
+    char file_basename[MAX_PATH_LEN];
+    memset(file_basename, 0, MAX_PATH_LEN);
+    const char *b = get_basename(path);
+    if (!b) {
+        R2F2_LOG_ERR("could not get basename for path '%s'", path);
+        return RET_ERR;
+    }
+    /*
+     * make sure to also copy '\0' terminator, important in case we don't have a
+     * zeroed buffer at some point
+     */
+    memcpy(file_basename, b, strlen(b) + 1);
+
+    for (size_t i = 0; i < NUM_DIR_META_ENTRIES; i++) {
+        r2f2_ret read_ret = read_dir_meta_entry(fs, dmb_ret.value, i, buf);
+        if (read_ret != RET_OK) {
+            return read_ret;
+        }
+
+        /* no more valid entries can come after this one */
+        if (!is_entry_used(buf->f)) {
+            break;
+        }
+        if (!is_entry_committed(buf->f)) {
+            continue;
+        }
+        /*
+         * the file in this entry is unlinked/removed, but it may have been
+         * recreated, so keep on searching
+         */
+        if (is_entry_reclaimable(buf->f)) {
+            continue;
+        }
+
+        if (memcmp(buf->path, file_basename, MAX_PATH_LEN) == 0) {
+            ret->dme_idx = i;
+            return RET_OK;
+        }
+    }
+
+    return RET_NOT_FOUND;
 }
 
 void dump_file_seq_block(FILE *f, r2f2_fs_t *fs, block_idx prev_block,

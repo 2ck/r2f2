@@ -3,7 +3,7 @@
 #include "r2f2_defines.h"
 #include <stdbool.h>
 
-struct fildes {
+typedef struct fildes {
     char path[MAX_PATH_LEN];
     bool active;
 
@@ -37,7 +37,7 @@ struct fildes {
         uint8_t *data;
     } block_buffer;
 #endif
-};
+} fildes_t;
 
 #ifdef __cplusplus
 extern "C" {
@@ -57,12 +57,6 @@ RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path);
   returns RET_OK on success or an error code on fail
  */
 r2f2_ret r2f2_migrate_file_to_indir_block(r2f2_fs_t *fs, r2f2_fd fd);
-
-/**
- * returns the file's first file_indir_block as pointed to by the
- * dir_meta_entry, or a FILE_NOT_FOUND error in case no matching entry was found
- */
-RESULT(block_idx) r2f2_find_file_indir_block(r2f2_fs_t *fs, const char *path);
 
 /**
  * creates the in-flash metadata for a file. the directory the file resides in

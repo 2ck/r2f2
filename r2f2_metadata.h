@@ -2,6 +2,7 @@
 
 #include "r2f2.h"
 #include "r2f2_defines.h"
+#include "r2f2_file.h"
 #include "util/helpers.h"
 #include <stdbool.h>
 
@@ -41,7 +42,8 @@ struct __attribute__((packed)) r2f2_superblock {
 typedef uint8_t entry_flags_t;
 #define ENTRY_COMMIT_MASK (1U << 0)
 #define ENTRY_USED_MASK (1U << 1)
-#define ENTRY_INDIRECT_MASK (1U << 2)
+#define ENTRY_RECLAIMABLE_MASK (1U << 2)
+#define ENTRY_INDIRECT_MASK (1U << 3)
 
 typedef struct __attribute__((packed)) dir_meta_entry {
     entry_flags_t f;
@@ -104,10 +106,12 @@ RESULT(block_idx) get_valid_next_block(r2f2_fs_t *fs, block_idx *indices);
 /* flip the corresponding bit to 0 (flash is 0xFF by default) */
 void mark_entry_committed(entry_flags_t *f);
 void mark_entry_used(entry_flags_t *f);
+void mark_entry_reclaimable(entry_flags_t *f);
 void mark_entry_indirect(entry_flags_t *f);
 /* check if the corresponding bit is 0 */
 bool is_entry_committed(entry_flags_t f);
 bool is_entry_used(entry_flags_t f);
+bool is_entry_reclaimable(entry_flags_t f);
 bool is_entry_indirect(entry_flags_t f);
 
 r2f2_ret read_dir_meta_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
@@ -158,6 +162,15 @@ RESULT(block_idx) find_data_block_for_off(r2f2_fs_t *fs,
 RESULT(block_idx) find_data_block_for_off_direct(r2f2_fs_t *fs,
                                                  block_idx file_seq_block_idx,
                                                  size_t off);
+
+struct dir_traversal_ret {
+    block_idx dmb_idx;
+    uint32_t dme_idx;
+};
+
+r2f2_ret r2f2_get_file_dir_entry(r2f2_fs_t *fs, const char *path,
+                                  dir_meta_entry_t *buf,
+                                  struct dir_traversal_ret *ret);
 
 void dump_fs_dot(r2f2_fs_t *fs, const char *filename);
 #ifdef __cplusplus
