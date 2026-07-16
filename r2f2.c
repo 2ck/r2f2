@@ -142,6 +142,7 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
             if (seq_block.code != RET_OK) {
                 return seq_block.code;
             }
+            seq_block_idx = seq_block.value;
         } else {
             seq_block_idx = next_block.value;
         }
@@ -267,10 +268,11 @@ ssize_t r2f2_read(r2f2_fs_t *fs, r2f2_fd fd, void *buf, size_t count) {
 
     /* sanity check if this read is possible */
     if (f->file_offset + count > f->file_size + f->block_buffer.count) {
-        R2F2_LOG_ERR("invalid read of size %zu for file with size %zu, offset "
-                     "%zu, fd buffer size %zu",
-                     count, f->file_size, f->file_offset,
-                     f->block_buffer.count);
+        R2F2_LOG_ERR(
+            "invalid read of size %zu for file '%s' with size %zu, offset "
+            "%zu, fd buffer size %zu",
+            count, f->path, f->file_size, f->file_offset,
+            f->block_buffer.count);
         return RET_OOB;
     }
 
@@ -443,7 +445,7 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
             }
 
             file_indir_entry_t fie;
-            memset(fie.seq_block, 0xFF, sizeof(fie.seq_block));
+            memset(&fie, 0xFF, sizeof(fie));
             fie.seq_block[0] = seq_block_idx.value;
             mark_entry_used(&fie.f);
 

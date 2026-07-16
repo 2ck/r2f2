@@ -129,7 +129,7 @@ r2f2_ret r2f2_migrate_file_to_indir_block(r2f2_fs_t *fs, r2f2_fd fd) {
     /* create initial indir_entry in our new indir_block */
 
     file_indir_entry_t fie;
-    memset(fie.seq_block, 0xFF, sizeof(fie.seq_block));
+    memset(&fie, 0xFF, sizeof(file_indir_entry_t));
     fie.seq_block[0] = f->meta.seq.last_block;
     mark_entry_used(&fie.f);
     r2f2_ret ie_ret =
