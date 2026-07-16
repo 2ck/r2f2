@@ -202,6 +202,8 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
         f->meta.seq.next_entry = last_fse.value + 1;
         f->meta.data.last_block = fse.data_block;
         f->meta.data.last_block_fill = fse.data_block_fill_level;
+
+        return fd.value;
     } else if (creat) {
         /* file doesn't exist but we're supposed to create it */
         RESULT(r2f2_fd) fd = r2f2_register_file(fs, path);
