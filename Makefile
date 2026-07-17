@@ -14,6 +14,7 @@ CFLAGS += -Wall -Wextra -Wpedantic
 # disable warnings for the logging macros:
 CFLAGS += -Wno-gnu-zero-variadic-macro-arguments -Wno-gnu-auto-type
 CFLAGS += -g -O0 -std=c11 -I.
+CFLAGS += -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined -fno-sanitize-recover=all
 LDFLAGS += -L build -l r2f2
 
 OUTLIB = build/libr2f2.a

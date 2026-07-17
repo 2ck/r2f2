@@ -64,6 +64,9 @@ r2f2_ret r2f2_mount(r2f2_fs_t *fs) {
 
     /* we are mounted */
     /* TODO: set up buffers/caches or something, idk */
+    for (size_t i = 0; i < MAX_NUM_FDS; i++) {
+        fs->fds[i].active = false;
+    }
     return RET_OK;
 }
 
