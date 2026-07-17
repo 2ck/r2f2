@@ -184,6 +184,13 @@ r2f2_ret free_block(r2f2_fs_t *fs, block_idx b) {
         return RET_ERR;
     }
 
+    r2f2_ret erase_ret = fs->cfg->flash_erase(fs, b * fs->cfg->geom.block_size,
+                                              fs->cfg->geom.block_size);
+    if (erase_ret != RET_OK) {
+        R2F2_LOG_ERR("failed (%d) to erase block %u", erase_ret, b);
+        return erase_ret;
+    }
+
     alloc_block_entry_t entry = {.b = b};
     fs->cfg->flash_write(fs, _alloc_region_next_free_ptr,
                          sizeof(alloc_block_entry_t), &entry);
