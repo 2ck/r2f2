@@ -119,7 +119,7 @@ r2f2_ret read_dir_meta_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
 r2f2_ret write_dir_meta_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
                               dir_meta_entry_t *buf);
 r2f2_ret read_dir_meta_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
-                                    entry_flags_t *buf);
+                                   entry_flags_t *buf);
 r2f2_ret write_dir_meta_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
                                     entry_flags_t *buf);
 
@@ -169,8 +169,8 @@ struct dir_traversal_ret {
 };
 
 r2f2_ret r2f2_get_file_dir_entry(r2f2_fs_t *fs, const char *path,
-                                  dir_meta_entry_t *buf,
-                                  struct dir_traversal_ret *ret);
+                                 dir_meta_entry_t *buf,
+                                 struct dir_traversal_ret *ret);
 
 void dump_fs_dot(r2f2_fs_t *fs, const char *filename);
 #ifdef __cplusplus

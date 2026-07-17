@@ -93,8 +93,9 @@ RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path) {
             }
 
             if (memcmp(dme.path, segment, MAX_PATH_LEN) == 0) {
-                RESULT(block_idx) next_block =
-                    get_valid_next_block(fs, dme.next_block);
+                block_idx next[NUM_NEXT_PTRS];
+                memcpy(next, dme.next_block, sizeof(next));
+                RESULT(block_idx) next_block = get_valid_next_block(fs, next);
                 if (next_block.code != RET_OK) {
                     return next_block;
                 }

@@ -462,8 +462,9 @@ RESULT(block_idx) find_data_block_for_off(r2f2_fs_t *fs,
             for (size_t j = start_from_seq_entry; j < NUM_FILE_SEQ_ENTRIES;
                  j++) {
                 file_seq_entry_t fse;
-                RESULT(block_idx) seq_block =
-                    get_valid_next_block(fs, fie.seq_block);
+                block_idx next[NUM_NEXT_PTRS];
+                memcpy(next, fie.seq_block, sizeof(next));
+                RESULT(block_idx) seq_block = get_valid_next_block(fs, next);
                 if (seq_block.code != RET_OK) {
                     return RESULT_ERR(block_idx, seq_block.code);
                 }
@@ -623,8 +624,9 @@ void dump_file_indir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block,
     for (size_t i = 0; i < NUM_FILE_INDIR_ENTRIES; i++) {
         read_file_indir_entry(fs, file_indir_block, i, &fie);
         if (is_entry_used(fie.f) && is_entry_committed(fie.f)) {
-            RESULT(block_idx) next_block =
-                get_valid_next_block(fs, fie.seq_block);
+            block_idx next[NUM_NEXT_PTRS];
+            memcpy(next, fie.seq_block, sizeof(next));
+            RESULT(block_idx) next_block = get_valid_next_block(fs, next);
             if (next_block.code != RET_OK) {
                 R2F2_LOG_ERR("no valid next block");
                 return;
@@ -641,8 +643,9 @@ void dump_file_indir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block,
     for (size_t i = 0; i < NUM_FILE_INDIR_ENTRIES; i++) {
         read_file_indir_entry(fs, file_indir_block, i, &fie);
         if (is_entry_used(fie.f) && is_entry_committed(fie.f)) {
-            RESULT(block_idx) next_block =
-                get_valid_next_block(fs, fie.seq_block);
+            block_idx next[NUM_NEXT_PTRS];
+            memcpy(next, fie.seq_block, sizeof(next));
+            RESULT(block_idx) next_block = get_valid_next_block(fs, next);
             if (next_block.code != RET_OK) {
                 R2F2_LOG_ERR("no valid next block");
                 return;
@@ -662,9 +665,11 @@ void dump_dir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block) {
     dir_meta_entry_t dme;
     for (size_t d = 0; d < NUM_DIR_META_ENTRIES; d++) {
         read_dir_meta_entry(fs, dir_block, d, &dme);
-        if (is_entry_used(dme.f) && is_entry_committed(dme.f)) {
-            RESULT(block_idx) next_block =
-                get_valid_next_block(fs, dme.next_block);
+        if (!is_all_zero(&dme, sizeof(dir_meta_entry_t)) &&
+            is_entry_used(dme.f) && is_entry_committed(dme.f)) {
+            block_idx next[NUM_NEXT_PTRS];
+            memcpy(next, dme.next_block, sizeof(next));
+            RESULT(block_idx) next_block = get_valid_next_block(fs, next);
             if (next_block.code != RET_OK) {
                 R2F2_LOG_ERR("no valid next block");
                 return;
@@ -678,9 +683,11 @@ void dump_dir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block) {
 
     for (size_t d = 0; d < NUM_DIR_META_ENTRIES; d++) {
         read_dir_meta_entry(fs, dir_block, d, &dme);
-        if (is_entry_used(dme.f) && is_entry_committed(dme.f)) {
-            RESULT(block_idx) next_block =
-                get_valid_next_block(fs, dme.next_block);
+        if (!is_all_zero(&dme, sizeof(dir_meta_entry_t)) &&
+            is_entry_used(dme.f) && is_entry_committed(dme.f)) {
+            block_idx next[NUM_NEXT_PTRS];
+            memcpy(next, dme.next_block, sizeof(next));
+            RESULT(block_idx) next_block = get_valid_next_block(fs, next);
             if (next_block.code != RET_OK) {
                 R2F2_LOG_ERR("no valid next block");
                 return;

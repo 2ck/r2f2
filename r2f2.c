@@ -83,7 +83,9 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
 
     if (ret == RET_OK) {
         /* file exists already */
-        RESULT(block_idx) next_block = get_valid_next_block(fs, dme.next_block);
+        block_idx next[NUM_NEXT_PTRS];
+        memcpy(next, dme.next_block, sizeof(next));
+        RESULT(block_idx) next_block = get_valid_next_block(fs, next);
         if (next_block.code != RET_OK) {
             return next_block.code;
         }
@@ -110,8 +112,9 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
                 return ret;
             }
 
-            RESULT(block_idx) seq_block =
-                get_valid_next_block(fs, fie.seq_block);
+            block_idx next[NUM_NEXT_PTRS];
+            memcpy(next, fie.seq_block, sizeof(next));
+            RESULT(block_idx) seq_block = get_valid_next_block(fs, next);
             if (seq_block.code != RET_OK) {
                 return seq_block.code;
             }
@@ -418,7 +421,7 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
             }
 
             file_indir_entry_t fie;
-            memset(&fie, 0xFF, sizeof(fie));
+            memset(&fie, 0xFF, sizeof(file_indir_entry_t));
             fie.seq_block[0] = seq_block_idx.value;
             mark_entry_used(&fie.f);
 
