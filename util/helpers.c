@@ -23,6 +23,18 @@ bool is_all_zero(const void *buf, size_t size) {
     return true;
 }
 
+bool is_all_one(const void *buf, size_t size) {
+    const unsigned char *p = buf;
+
+    for (size_t i = 0; i < size; i++) {
+        if (p[i] != 0xFF) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 void r2f2_hexdump(const uint8_t *buf, size_t len) {
     size_t linenr = 0;
     const size_t breakafter = 32;

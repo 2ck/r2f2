@@ -29,6 +29,8 @@ const char *get_basename(const char *path);
 
 bool is_all_zero(const void *buf, size_t size);
 
+bool is_all_one(const void *buf, size_t size);
+
 void r2f2_hexdump(const uint8_t *buf, size_t len);
 
 #ifdef __cplusplus
