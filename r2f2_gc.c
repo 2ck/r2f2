@@ -11,7 +11,7 @@ RESULT(uint32_t) r2f2_gc_entry(r2f2_fs_t *fs, size_t target) {
     block_idx dir_block = fs->root_dir_block;
 
     dir_meta_entry_t dme;
-    for (int d = NUM_DIR_META_ENTRIES; d > 0; d--) {
+    for (int d = NUM_DIR_META_ENTRIES - 1; d >= 0; d--) {
         read_dir_meta_entry(fs, dir_block, d, &dme);
         if (is_entry_reclaimable(dme.f)) {
             uint32_t freed_blocks = r2f2_reclaim_file_blocks(fs, &dme);
