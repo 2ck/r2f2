@@ -44,10 +44,24 @@ extern "C" {
 #endif
 
 /**
- * returns the dir_meta_block in which the file resides, or a DIR_NOT_FOUND
- * error in case no matching dir_meta_block was found
+ * returns the (first) dir_meta_block (of the linked block list) in which the
+ * file resides, or a DIR_NOT_FOUND error in case no matching dir_meta_block was
+ * found
  */
 RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path);
+
+/**
+ * returns the last dir_meta_block of the linked block list in which the
+ * file resides
+ */
+RESULT(block_idx) r2f2_find_last_dir_meta_block(r2f2_fs_t *fs,
+                                                const char *path);
+
+/**
+ * allocates a new dir_meta_block and sets the given block's next pointer
+ * accordingly
+ */
+RESULT(block_idx) r2f2_create_next_dir_meta_block(r2f2_fs_t *fs, block_idx dmb);
 
 /**
  * a file whose dir_meta_entry previously directly pointed to a file_seq_block

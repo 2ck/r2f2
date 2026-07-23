@@ -554,32 +554,59 @@ r2f2_ret r2f2_get_file_dir_entry(r2f2_fs_t *fs, const char *path,
      */
     memcpy(file_basename, b, strlen(b) + 1);
 
-    for (size_t i = 0; i < NUM_DIR_META_ENTRIES; i++) {
-        r2f2_ret read_ret = read_dir_meta_entry(fs, dmb_ret.value, i, buf);
-        if (read_ret != RET_OK) {
-            return read_ret;
+    /*
+     * optionally iterate through the next block pointers until we find one with
+     * a matching entry
+     */
+    bool has_next_block = true;
+    block_idx dmb = dmb_ret.value;
+    do {
+        /* search through the entries of the current block */
+        for (size_t i = 0; i < NUM_DIR_META_ENTRIES; i++) {
+            r2f2_ret read_ret = read_dir_meta_entry(fs, dmb, i, buf);
+            if (read_ret != RET_OK) {
+                return read_ret;
+            }
+
+            /* no more valid entries can come after this one */
+            if (!is_entry_used(buf->f)) {
+                break;
+            }
+            if (!is_entry_committed(buf->f)) {
+                continue;
+            }
+            /*
+             * the file in this entry is unlinked/removed, but it may have been
+             * recreated, so keep on searching
+             */
+            if (is_entry_reclaimable(buf->f)) {
+                continue;
+            }
+
+            if (memcmp(buf->path, file_basename, MAX_PATH_LEN) == 0) {
+                ret->dme_idx = i;
+                return RET_OK;
+            }
         }
 
-        /* no more valid entries can come after this one */
-        if (!is_entry_used(buf->f)) {
-            break;
-        }
-        if (!is_entry_committed(buf->f)) {
-            continue;
-        }
-        /*
-         * the file in this entry is unlinked/removed, but it may have been
-         * recreated, so keep on searching
-         */
-        if (is_entry_reclaimable(buf->f)) {
-            continue;
+        /* get the next block, if it exists */
+        block_idx next[NUM_NEXT_PTRS];
+
+        r2f2_ret ret = fs->cfg->flash_read(fs,
+                                           dmb * fs->cfg->geom.block_size +
+                                               offsetof(dir_meta_block_t, next),
+                                           sizeof(next), next);
+        if (ret != RET_OK) {
+            return ret;
         }
 
-        if (memcmp(buf->path, file_basename, MAX_PATH_LEN) == 0) {
-            ret->dme_idx = i;
-            return RET_OK;
+        RESULT(block_idx) next_block = get_valid_next_block(fs, next);
+        if (next_block.code == RET_OK) {
+            dmb = next_block.value;
+        } else {
+            has_next_block = false;
         }
-    }
+    } while (has_next_block);
 
     return RET_NOT_FOUND;
 }

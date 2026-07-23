@@ -118,6 +118,78 @@ RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path) {
     return RESULT_OK(block_idx, current_block);
 }
 
+RESULT(block_idx) r2f2_find_last_dir_meta_block(r2f2_fs_t *fs,
+                                                const char *path) {
+    RESULT(block_idx) dir_meta_block_idx = r2f2_find_dir_meta_block(fs, path);
+    if (dir_meta_block_idx.code != RET_OK) {
+        return dir_meta_block_idx;
+    }
+
+    /*
+     * iterate through the next block pointers until we find one with free
+     * entries
+     */
+    block_idx dmb = dir_meta_block_idx.value;
+    bool has_next_block = true;
+    do {
+        block_idx next[NUM_NEXT_PTRS];
+
+        r2f2_ret ret = fs->cfg->flash_read(fs,
+                                           dmb * fs->cfg->geom.block_size +
+                                               offsetof(dir_meta_block_t, next),
+                                           sizeof(next), next);
+        if (ret != RET_OK) {
+            return RESULT_ERR(block_idx, ret);
+        }
+
+        RESULT(block_idx) next_block = get_valid_next_block(fs, next);
+        if (next_block.code == RET_OK) {
+            dmb = next_block.value;
+        } else {
+            has_next_block = false;
+        }
+    } while (has_next_block);
+
+    return RESULT_OK(block_idx, dmb);
+}
+
+RESULT(block_idx) r2f2_create_next_dir_meta_block(r2f2_fs_t *fs,
+                                                  block_idx dmb) {
+    block_idx next[NUM_NEXT_PTRS];
+
+    r2f2_ret ret = fs->cfg->flash_read(
+        fs, dmb * fs->cfg->geom.block_size + offsetof(dir_meta_block_t, next),
+        sizeof(next), next);
+    if (ret != RET_OK) {
+        return RESULT_ERR(block_idx, ret);
+    }
+
+    /* verify that there is no entry yet */
+    RESULT(block_idx) next_block = get_valid_next_block(fs, next);
+    if (next_block.code == RET_OK) {
+        R2F2_LOG_ERR("asked to create next block for dir_meta_block %u but it "
+                     "already exists (%u)",
+                     dmb, next_block.value);
+        return RESULT_ERR(block_idx, RET_EINVAL);
+    }
+
+    RESULT(block_idx) new_block = allocate_block(fs);
+    if (new_block.code != RET_OK) {
+        return new_block;
+    }
+
+    next[0] = new_block.value;
+
+    ret = fs->cfg->flash_write(
+        fs, dmb * fs->cfg->geom.block_size + offsetof(dir_meta_block_t, next),
+        sizeof(next), next);
+    if (ret != RET_OK) {
+        return RESULT_ERR(block_idx, ret);
+    }
+
+    return new_block;
+}
+
 r2f2_ret r2f2_migrate_file_to_indir_block(r2f2_fs_t *fs, r2f2_fd fd) {
     R2F2_FD_VALID_CHECK(fs, fd);
 
@@ -183,7 +255,8 @@ r2f2_ret r2f2_migrate_file_to_indir_block(r2f2_fs_t *fs, r2f2_fd fd) {
 }
 
 RESULT(r2f2_fd) r2f2_register_file(r2f2_fs_t *fs, const char *path) {
-    RESULT(block_idx) dir_meta_block_idx = r2f2_find_dir_meta_block(fs, path);
+    RESULT(block_idx) dir_meta_block_idx =
+        r2f2_find_last_dir_meta_block(fs, path);
     if (dir_meta_block_idx.code != RET_OK) {
         R2F2_LOG_ERR("dir traversal failed (%d) for path '%s'",
                      dir_meta_block_idx.code, path);
@@ -192,10 +265,17 @@ RESULT(r2f2_fd) r2f2_register_file(r2f2_fs_t *fs, const char *path) {
 
     RESULT(uint32_t) dme_num =
         get_free_dir_meta_entry(fs, dir_meta_block_idx.value);
-    if (dme_num.code != RET_OK) {
-        R2F2_LOG_WARN(
-            "TODO (unhandled): failed (%d) to get dir_entry in block %u",
-            dme_num.code, dir_meta_block_idx.value);
+    if (dme_num.code == RET_NOMEM) {
+        RESULT(block_idx) new_dir_meta_block =
+            r2f2_create_next_dir_meta_block(fs, dir_meta_block_idx.value);
+        if (new_dir_meta_block.code != RET_OK) {
+            return RESULT_ERR(r2f2_fd, new_dir_meta_block.code);
+        }
+        dir_meta_block_idx = new_dir_meta_block;
+        dme_num.value = 0;
+    } else if (dme_num.code != RET_OK) {
+        R2F2_LOG_WARN("failed (%d) to get dir_entry in block %u", dme_num.code,
+                      dir_meta_block_idx.value);
         return RESULT_ERR(r2f2_fd, dme_num.code);
     }
 
