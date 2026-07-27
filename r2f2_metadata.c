@@ -649,7 +649,7 @@ void dump_file_indir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block,
     file_indir_entry_t fie;
     for (size_t i = 0; i < NUM_FILE_INDIR_ENTRIES; i++) {
         read_file_indir_entry(fs, file_indir_block, i, &fie);
-        if (is_entry_used(fie.f) && is_entry_committed(fie.f)) {
+        if (!is_all_one(&fie, sizeof(file_indir_entry_t))) {
             block_idx next[NUM_NEXT_PTRS];
             memcpy(next, fie.seq_block, sizeof(next));
             RESULT(block_idx) next_block = get_valid_next_block(fs, next);
@@ -668,7 +668,7 @@ void dump_file_indir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block,
 
     for (size_t i = 0; i < NUM_FILE_INDIR_ENTRIES; i++) {
         read_file_indir_entry(fs, file_indir_block, i, &fie);
-        if (is_entry_used(fie.f) && is_entry_committed(fie.f)) {
+        if (!is_all_one(&fie, sizeof(file_indir_entry_t))) {
             block_idx next[NUM_NEXT_PTRS];
             memcpy(next, fie.seq_block, sizeof(next));
             RESULT(block_idx) next_block = get_valid_next_block(fs, next);
@@ -692,7 +692,7 @@ void dump_dir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block) {
     for (size_t d = 0; d < NUM_DIR_META_ENTRIES; d++) {
         read_dir_meta_entry(fs, dir_block, d, &dme);
         if (!is_all_zero(&dme, sizeof(dir_meta_entry_t)) &&
-            is_entry_used(dme.f) && is_entry_committed(dme.f)) {
+            !is_all_one(&dme, sizeof(dir_meta_entry_t))) {
             block_idx next[NUM_NEXT_PTRS];
             memcpy(next, dme.next_block, sizeof(next));
             RESULT(block_idx) next_block = get_valid_next_block(fs, next);
@@ -700,7 +700,11 @@ void dump_dir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block) {
                 R2F2_LOG_ERR("no valid next block");
                 return;
             }
-            fprintf(f, "{ \\\"%s\\\" | <e%zu> %u} | ", dme.path, d,
+            fprintf(f,
+                    "{ \\\"%s\\\" | used=%d,comm=%d,\\\nindir=%d,recl=%d | "
+                    "<e%zu> %u} | ",
+                    dme.path, is_entry_used(dme.f), is_entry_committed(dme.f),
+                    is_entry_indirect(dme.f), is_entry_reclaimable(dme.f), d,
                     next_block.value);
         }
     }
@@ -710,7 +714,7 @@ void dump_dir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block) {
     for (size_t d = 0; d < NUM_DIR_META_ENTRIES; d++) {
         read_dir_meta_entry(fs, dir_block, d, &dme);
         if (!is_all_zero(&dme, sizeof(dir_meta_entry_t)) &&
-            is_entry_used(dme.f) && is_entry_committed(dme.f)) {
+            !is_all_one(&dme, sizeof(dir_meta_entry_t))) {
             block_idx next[NUM_NEXT_PTRS];
             memcpy(next, dme.next_block, sizeof(next));
             RESULT(block_idx) next_block = get_valid_next_block(fs, next);
@@ -739,4 +743,5 @@ void dump_fs_dot(r2f2_fs_t *fs, const char *filename) {
     dump_dir_block(f, fs, dir_block);
 
     fprintf(f, "}");
+    fclose(f);
 }
