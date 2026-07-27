@@ -12,6 +12,8 @@ static const uint32_t _allocator_first_block = 2;
 static uint32_t _allocator_num_blocks;
 static uint32_t _first_allocable_block;
 
+static size_t _total_free = 0;
+
 static inline uint32_t get_num_allocator_blocks(r2f2_fs_t *fs) {
     /*
      * We have enough space with ceil(N/K) + 1 blocks
@@ -52,6 +54,7 @@ r2f2_ret prepare_block_allocator(r2f2_fs_t *fs) {
         }
 
         entry_idx++;
+        _total_free++;
     }
 
     _next_free_ptr = _alloc_ptr + sizeof(alloc_block_entry_t) * entry_idx;
@@ -92,8 +95,11 @@ RESULT(block_idx) allocate_block(r2f2_fs_t *fs) {
     if (_alloc_ptr == _next_free_ptr) {
         RESULT(uint32_t) gc_ret = r2f2_gc_entry(fs, 1);
         if (gc_ret.code != RET_OK) {
-            R2F2_LOG_ERR("no more free blocks and garbage collection failed");
-            return RESULT_ERR(block_idx, RET_NOMEM);
+            R2F2_LOG_ERR(
+                "no more free blocks and garbage collection failed (%d)",
+                gc_ret.code);
+            dump_fs_dot(fs, "gc_fail.dot");
+            return RESULT_ERR(block_idx, gc_ret.code);
         } else {
             R2F2_LOG_DEBUG("garbage collection recovered %u blocks",
                            gc_ret.value);
@@ -132,6 +138,8 @@ RESULT(block_idx) allocate_block(r2f2_fs_t *fs) {
 
     advance_ptr(fs, &_alloc_ptr);
 
+    _total_free--;
+    /* R2F2_LOG_INFO("allocate block %u, total free %zu", b, _total_free); */
     return RESULT_OK(block_idx, b);
 }
 
@@ -190,6 +198,9 @@ r2f2_ret free_block(r2f2_fs_t *fs, block_idx b) {
     }
 
     advance_ptr(fs, &_next_free_ptr);
+
+    _total_free++;
+    /* R2F2_LOG_INFO("free block %u, total free now %zu", b, _total_free); */
 
     return RET_OK;
 }
