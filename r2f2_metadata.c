@@ -539,8 +539,6 @@ r2f2_ret r2f2_get_file_dir_entry(r2f2_fs_t *fs, const char *path,
         return dmb_ret.code;
     }
 
-    ret->dmb_idx = dmb_ret.value;
-
     char file_basename[MAX_PATH_LEN];
     memset(file_basename, 0, MAX_PATH_LEN);
     const char *b = get_basename(path);
@@ -585,6 +583,7 @@ r2f2_ret r2f2_get_file_dir_entry(r2f2_fs_t *fs, const char *path,
 
             if (memcmp(buf->path, file_basename, MAX_PATH_LEN) == 0) {
                 ret->dme_idx = i;
+                ret->dmb_idx = dmb;
                 return RET_OK;
             }
         }
