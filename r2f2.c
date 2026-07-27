@@ -18,6 +18,8 @@ r2f2_ret r2f2_format(r2f2_fs_t *fs) {
     if (b.code != RET_OK) {
         return b.code;
     }
+    /* TODO: remove this and just search for it in block 1/2 or something */
+    /* alternatively, make this have several next_block-pointers */
     fs_info.root_dir_block = b.value;
     fs->root_dir_block = b.value;
 
