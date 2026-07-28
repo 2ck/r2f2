@@ -7,7 +7,7 @@ SRCS = r2f2.c r2f2_alloc.c r2f2_file.c r2f2_gc.c r2f2_metadata.c util/helpers.c
 SRCS += ecc/bch/bch.c
 OBJS = $(patsubst %.c,build/%.o,$(SRCS))
 
-TESTS_SRCS = tests/basic.c
+TESTS_SRCS = tests/basic.c tests/ecc.c
 TESTS_OBJS = $(patsubst %.c,build/%.o,$(TESTS_SRCS))
 TESTS_BINS = $(patsubst %.c,build/%,$(TESTS_SRCS))
 
