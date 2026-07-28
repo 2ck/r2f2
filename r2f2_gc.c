@@ -22,7 +22,13 @@ RESULT(uint32_t) r2f2_gc_entry(r2f2_fs_t *fs, size_t target) {
             uint32_t freed_blocks = r2f2_reclaim_file_blocks(fs, &dme);
             /* overwrite dir entry */
             memset(&dme, 0, sizeof(dir_meta_entry_t));
-            write_dir_meta_entry(fs, dir_block, d, &dme);
+            r2f2_ret ret = write_dir_meta_entry(fs, dir_block, d, &dme);
+            if (ret != RET_OK) {
+                R2F2_LOG_ERR(
+                    "failed (%d) to overwrite entry %d in dir_block %u", ret, d,
+                    dir_block);
+                return RESULT_ERR(uint32_t, ret);
+            }
             freed += freed_blocks;
             if (freed >= target) {
                 return RESULT_OK(uint32_t, freed);
@@ -51,23 +57,21 @@ RESULT(uint32_t) r2f2_gc_entry(r2f2_fs_t *fs, size_t target) {
 
 uint32_t r2f2_reclaim_file_blocks(r2f2_fs_t *fs, dir_meta_entry_t *dme) {
     uint32_t freed = 0;
-    for (size_t i = 0; i < NUM_NEXT_PTRS; i++) {
-        if (dme->next_block[i] == 0 ||
-            dme->next_block[i] >= fs->cfg->geom.num_blocks) {
-            continue;
-        }
-
+    block_idx next[NUM_NEXT_PTRS];
+    memcpy(next, dme->next_block, sizeof(next));
+    RESULT(block_idx) next_block = get_valid_next_block(fs, next);
+    if (next_block.code == RET_OK) {
         /*
          * entry 0 is always a seq_block, which is only upgraded to an
          * indir_block starting from the next entry
          */
-        if (is_entry_indirect(dme->f) && i != 0) {
-            freed += r2f2_reclaim_indir_block(fs, dme->next_block[i]);
+        if (is_entry_indirect(dme->f)) {
+            freed += r2f2_reclaim_indir_block(fs, next_block.value);
         } else {
-            freed += r2f2_reclaim_seq_block(fs, dme->next_block[i]);
+            freed += r2f2_reclaim_seq_block(fs, next_block.value);
         }
 
-        free_block(fs, dme->next_block[i]);
+        free_block(fs, next_block.value);
         freed++;
     }
     return freed;
@@ -78,19 +82,11 @@ uint32_t r2f2_reclaim_indir_block(r2f2_fs_t *fs, block_idx file_indir_block) {
     file_indir_entry_t fie;
     for (size_t i = 0; i < NUM_FILE_INDIR_ENTRIES; i++) {
         read_file_indir_entry(fs, file_indir_block, i, &fie);
-        for (size_t i = 0; i < NUM_NEXT_PTRS; i++) {
-            if (fie.seq_block[i] == 0 ||
-                fie.seq_block[i] >= fs->cfg->geom.num_blocks) {
-                continue;
-            }
-            /* R2F2_LOG_DEBUG( */
-            /*     "found reclaimable seq_block %u in indir_block %u entry %zu",
-             */
-            /*     fie.seq_block[i], file_indir_block, i); */
-
-            freed += r2f2_reclaim_seq_block(fs, fie.seq_block[i]);
-
-            block_idx seq_block = fie.seq_block[i];
+        block_idx next[NUM_NEXT_PTRS];
+        memcpy(next, fie.seq_block, sizeof(next));
+        RESULT(block_idx) seq_block = get_valid_next_block(fs, next);
+        if (seq_block.code == RET_OK) {
+            freed += r2f2_reclaim_seq_block(fs, seq_block.value);
             memset(&fie, 0, sizeof(file_indir_entry_t));
             r2f2_ret ret =
                 write_file_indir_entry(fs, file_indir_block, i, &fie);
@@ -100,7 +96,7 @@ uint32_t r2f2_reclaim_indir_block(r2f2_fs_t *fs, block_idx file_indir_block) {
                     i, file_indir_block);
                 return freed;
             }
-            free_block(fs, seq_block);
+            free_block(fs, seq_block.value);
             freed++;
         }
     }
