@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     (void)argv;
     void *flash = malloc(FLASH_NUM_BLOCKS * FLASH_BLOCK_SIZE);
     if (!flash) {
-        printf("Error during malloc.");
+        printf("Error during malloc.\n");
         return -1;
     }
     memset(flash, 0xFF, FLASH_NUM_BLOCKS * FLASH_BLOCK_SIZE);

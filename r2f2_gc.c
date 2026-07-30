@@ -57,7 +57,7 @@ RESULT(uint32_t) r2f2_gc_entry(r2f2_fs_t *fs, size_t target) {
 
 uint32_t r2f2_reclaim_file_blocks(r2f2_fs_t *fs, dir_meta_entry_t *dme) {
     uint32_t freed = 0;
-    block_idx next[NUM_NEXT_PTRS];
+    flash_block_idx next[NUM_NEXT_PTRS];
     memcpy(next, dme->next_block, sizeof(next));
     RESULT(block_idx) next_block = get_valid_next_block(fs, next);
     if (next_block.code == RET_OK) {
@@ -82,7 +82,7 @@ uint32_t r2f2_reclaim_indir_block(r2f2_fs_t *fs, block_idx file_indir_block) {
     file_indir_entry_t fie;
     for (size_t i = 0; i < NUM_FILE_INDIR_ENTRIES; i++) {
         read_file_indir_entry(fs, file_indir_block, i, &fie);
-        block_idx next[NUM_NEXT_PTRS];
+        flash_block_idx next[NUM_NEXT_PTRS];
         memcpy(next, fie.seq_block, sizeof(next));
         RESULT(block_idx) seq_block = get_valid_next_block(fs, next);
         if (seq_block.code == RET_OK) {
@@ -108,15 +108,19 @@ uint32_t r2f2_reclaim_seq_block(r2f2_fs_t *fs, block_idx file_seq_block) {
     file_seq_entry_t fse;
     for (size_t i = 0; i < NUM_FILE_SEQ_ENTRIES; i++) {
         read_file_seq_entry(fs, file_seq_block, i, &fse);
-        if (fse.data_block == 0 || fse.data_block >= fs->cfg->geom.num_blocks) {
+        RESULT(block_idx) data_block = GET_FLASH_BLOCK_IDX(fse.data_block);
+        if (data_block.code != RET_OK) {
+            break;
+        }
+        if (data_block.value == 0 ||
+            data_block.value >= fs->cfg->geom.num_blocks) {
             continue;
         }
         /* R2F2_LOG_DEBUG( */
         /*     "found reclaimable data_block %u in indir_block %u entry %zu", */
-        /*     fse.data_block, file_seq_block, i); */
+        /*     data_block, file_seq_block, i); */
 
-        /* overwrite data_block to 0 */
-        block_idx data_block = fse.data_block;
+        /* overwrite entry to 0 */
         memset(&fse, 0, sizeof(file_seq_entry_t));
         r2f2_ret ret = write_file_seq_entry(fs, file_seq_block, i, &fse);
         if (ret != RET_OK) {
@@ -124,7 +128,7 @@ uint32_t r2f2_reclaim_seq_block(r2f2_fs_t *fs, block_idx file_seq_block) {
                          ret, i, file_seq_block);
             return freed;
         }
-        free_block(fs, data_block);
+        free_block(fs, data_block.value);
         freed++;
     }
     return freed;
@@ -180,7 +184,7 @@ r2f2_ret r2f2_migrate_root_dir_block(r2f2_fs_t *fs) {
         i_w++;
     }
 
-    block_idx next[NUM_NEXT_PTRS];
+    flash_block_idx next[NUM_NEXT_PTRS];
     r2f2_ret ret =
         fs->cfg->flash_read(fs,
                             fs->root_dir_block * fs->cfg->geom.block_size +

@@ -19,20 +19,20 @@ typedef struct r2f2_superblock r2f2_superblock_t;
  */
 struct __attribute__((packed)) r2f2_fs_info {
     struct __attribute__((packed)) {
-        uint32_t magic;
-        uint8_t version;
+        flash_u32 magic;
+        flash_u32 version;
 
         struct __attribute__((packed)) {
-            uint32_t page_size;
-            uint32_t block_size;
-            uint32_t num_blocks;
+            flash_u32 page_size;
+            flash_u32 block_size;
+            flash_u32 num_blocks;
 
-            uint32_t path_len;
+            flash_u32 path_len;
         } fs_config;
 
     } global_metadata;
 
-    block_idx root_dir_block;
+    flash_block_idx root_dir_block;
 };
 
 struct __attribute__((packed)) r2f2_superblock {
@@ -48,19 +48,18 @@ typedef uint8_t entry_flags_t;
 typedef struct __attribute__((packed)) dir_meta_entry {
     entry_flags_t f;
     char path[MAX_PATH_LEN];
-    block_idx next_block[NUM_NEXT_PTRS];
+    flash_block_idx next_block[NUM_NEXT_PTRS];
 } dir_meta_entry_t;
 
 typedef struct dir_meta_block {
     struct dir_meta_entry entries[NUM_DIR_META_ENTRIES];
-    block_idx next[NUM_NEXT_PTRS];
-    uint8_t _[24];
+    flash_block_idx next[NUM_NEXT_PTRS];
 } dir_meta_block_t;
 
 typedef struct __attribute__((packed)) file_indir_entry {
     entry_flags_t f;
 
-    block_idx seq_block[NUM_NEXT_PTRS];
+    flash_block_idx seq_block[NUM_NEXT_PTRS];
 } file_indir_entry_t;
 
 typedef struct __attribute__((packed)) file_indir_block {
@@ -68,22 +67,20 @@ typedef struct __attribute__((packed)) file_indir_block {
 
     struct file_indir_entry entries[NUM_FILE_INDIR_ENTRIES];
 
-    block_idx rnd_updates[NUM_NEXT_PTRS];
+    flash_block_idx next_block[NUM_NEXT_PTRS];
 
-    uint8_t padding[506];
-
-    block_idx next_block[NUM_NEXT_PTRS];
+    flash_block_idx rnd_updates[NUM_NEXT_PTRS];
 } file_indir_block_t;
 
 typedef struct __attribute__((packed)) file_seq_entry {
     entry_flags_t f;
 
-    block_idx data_block;
-    uint32_t data_block_fill_level;
+    flash_block_idx data_block;
+    flash_u32 data_block_fill_level;
 
-    uint32_t data_block_offset_in_file;
+    flash_u32 data_block_offset_in_file;
 
-    uint32_t current_file_size;
+    flash_u32 current_file_size;
 } file_seq_entry_t;
 
 typedef struct __attribute__((packed)) file_seq_block {
@@ -101,7 +98,7 @@ extern "C" {
  *
  * returns the value of the last valid next_block entry
  */
-RESULT(block_idx) get_valid_next_block(r2f2_fs_t *fs, block_idx *indices);
+RESULT(block_idx) get_valid_next_block(r2f2_fs_t *fs, flash_block_idx *indices);
 
 /* flip the corresponding bit to 0 (flash is 0xFF by default) */
 void mark_entry_committed(entry_flags_t *f);

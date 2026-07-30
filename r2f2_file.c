@@ -93,7 +93,7 @@ RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path) {
             }
 
             if (memcmp(dme.path, segment, MAX_PATH_LEN) == 0) {
-                block_idx next[NUM_NEXT_PTRS];
+                flash_block_idx next[NUM_NEXT_PTRS];
                 memcpy(next, dme.next_block, sizeof(next));
                 RESULT(block_idx) next_block = get_valid_next_block(fs, next);
                 if (next_block.code != RET_OK) {
@@ -132,7 +132,7 @@ RESULT(block_idx) r2f2_find_last_dir_meta_block(r2f2_fs_t *fs,
     block_idx dmb = dir_meta_block_idx.value;
     bool has_next_block = true;
     do {
-        block_idx next[NUM_NEXT_PTRS];
+        flash_block_idx next[NUM_NEXT_PTRS];
 
         r2f2_ret ret = fs->cfg->flash_read(fs,
                                            dmb * fs->cfg->geom.block_size +
@@ -155,7 +155,7 @@ RESULT(block_idx) r2f2_find_last_dir_meta_block(r2f2_fs_t *fs,
 
 RESULT(block_idx) r2f2_create_next_dir_meta_block(r2f2_fs_t *fs,
                                                   block_idx dmb) {
-    block_idx next[NUM_NEXT_PTRS];
+    flash_block_idx next[NUM_NEXT_PTRS];
 
     r2f2_ret ret = fs->cfg->flash_read(
         fs, dmb * fs->cfg->geom.block_size + offsetof(dir_meta_block_t, next),
@@ -178,7 +178,7 @@ RESULT(block_idx) r2f2_create_next_dir_meta_block(r2f2_fs_t *fs,
         return new_block;
     }
 
-    next[0] = new_block.value;
+    SET_FLASH_BLOCK_IDX(next[0], new_block.value);
 
     ret = fs->cfg->flash_write(
         fs, dmb * fs->cfg->geom.block_size + offsetof(dir_meta_block_t, next),
@@ -204,7 +204,7 @@ r2f2_ret r2f2_migrate_file_to_indir_block(r2f2_fs_t *fs, r2f2_fd fd) {
 
     file_indir_entry_t fie;
     memset(&fie, 0xFF, sizeof(file_indir_entry_t));
-    fie.seq_block[0] = f->meta.seq.last_block;
+    SET_FLASH_BLOCK_IDX(fie.seq_block[0], f->meta.seq.last_block);
     mark_entry_used(&fie.f);
     r2f2_ret ie_ret =
         write_file_indir_entry(fs, indir_block_idx.value, 0, &fie);
@@ -229,7 +229,9 @@ r2f2_ret r2f2_migrate_file_to_indir_block(r2f2_fs_t *fs, r2f2_fd fd) {
 
     uint32_t free_next_ptr = NUM_NEXT_PTRS;
     for (size_t i = 0; i < NUM_NEXT_PTRS; i++) {
-        if (dme.next_block[i] >= fs->cfg->geom.num_blocks) {
+        RESULT(block_idx) n = GET_FLASH_BLOCK_IDX(dme.next_block[i]);
+        CHECK_OK_RETURN(n);
+        if (n.value >= fs->cfg->geom.num_blocks) {
             free_next_ptr = i;
             break;
         }
@@ -240,7 +242,7 @@ r2f2_ret r2f2_migrate_file_to_indir_block(r2f2_fs_t *fs, r2f2_fd fd) {
                      f->path);
         return RET_ERR;
     }
-    dme.next_block[free_next_ptr] = indir_block_idx.value;
+    SET_FLASH_BLOCK_IDX(dme.next_block[free_next_ptr], indir_block_idx.value);
     mark_entry_indirect(&dme.f);
 
     dme_ret =
@@ -316,7 +318,7 @@ RESULT(r2f2_fd) r2f2_register_file(r2f2_fs_t *fs, const char *path) {
     memcpy(dme.path, b, strlen(b) + 1);
 
     memset(dme.next_block, 0xFF, sizeof(dme.next_block));
-    dme.next_block[0] = file_seq_block_idx.value;
+    SET_FLASH_BLOCK_IDX(dme.next_block[0], file_seq_block_idx.value);
 
     mark_entry_used(&dme.f);
 

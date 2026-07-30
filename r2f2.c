@@ -13,14 +13,15 @@ r2f2_ret r2f2_format(r2f2_fs_t *fs) {
 
     prepare_block_allocator(fs);
 
-    fs_info.global_metadata.magic = R2F2_MAGIC;
+    SET_FLASH_U32(fs_info.global_metadata.magic, R2F2_MAGIC);
     RESULT(block_idx) b = allocate_block(fs);
     if (b.code != RET_OK) {
         return b.code;
     }
     /* TODO: remove this and just search for it in block 1/2 or something */
     /* alternatively, make this have several next_block-pointers */
-    fs_info.root_dir_block = b.value;
+
+    SET_FLASH_BLOCK_IDX(fs_info.root_dir_block, b.value);
     fs->root_dir_block = b.value;
 
     r2f2_ret ret =
@@ -51,6 +52,12 @@ r2f2_ret r2f2_mount(r2f2_fs_t *fs) {
     R2F2_ASSERT(sizeof(struct file_seq_block), <=, fs->cfg->geom.block_size,
                 "%zu");
 
+#ifdef ECC_ON_METADATA
+    fs->bch = init_bch(ECC_BCH_M, ECC_BCH_T, 0);
+    R2F2_ASSERT((void *)fs->bch, !=, NULL, "%p");
+    R2F2_ASSERT(fs->bch->ecc_bytes, ==, ECC_BCH_LEN, "%u");
+#endif
+
     r2f2_fs_info_t fs_info;
     /* read root block to see if there is logfs on flash */
     fs->cfg->flash_read(fs, R2F2_SUPERBLOCK_IDX * fs->cfg->geom.block_size,
@@ -61,7 +68,9 @@ r2f2_ret r2f2_mount(r2f2_fs_t *fs) {
         /* we need to format */
         r2f2_format(fs);
     } else {
-        fs->root_dir_block = fs_info.root_dir_block;
+        RESULT(block_idx) b = GET_FLASH_BLOCK_IDX(fs_info.root_dir_block);
+        CHECK_OK_RETURN(b);
+        fs->root_dir_block = b.value;
     }
 
     /* we are mounted */
@@ -85,7 +94,7 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
 
     if (ret == RET_OK) {
         /* file exists already */
-        block_idx next[NUM_NEXT_PTRS];
+        flash_block_idx next[NUM_NEXT_PTRS];
         memcpy(next, dme.next_block, sizeof(next));
         RESULT(block_idx) next_block = get_valid_next_block(fs, next);
         if (next_block.code != RET_OK) {
@@ -114,7 +123,7 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
                 return ret;
             }
 
-            block_idx next[NUM_NEXT_PTRS];
+            flash_block_idx next[NUM_NEXT_PTRS];
             memcpy(next, fie.seq_block, sizeof(next));
             RESULT(block_idx) seq_block = get_valid_next_block(fs, next);
             if (seq_block.code != RET_OK) {
@@ -172,15 +181,21 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
         }
         fildes_t *f = &fs->fds[fd.value];
         f->file_offset = 0;
-        f->file_size = fse.current_file_size;
+        RESULT(uint32_t) file_size = GET_FLASH_U32(fse.current_file_size);
+        CHECK_OK_RETURN(file_size);
+        f->file_size = file_size.value;
 
         f->meta.dir.block = dir_ret.dmb_idx;
         f->meta.dir.entry = dir_ret.dme_idx;
         f->meta.indir.block = indir_block_idx;
         f->meta.seq.last_block = seq_block_idx;
         f->meta.seq.next_entry = last_fse.value + 1;
-        f->meta.data.last_block = fse.data_block;
-        f->meta.data.last_block_fill = fse.data_block_fill_level;
+        RESULT(block_idx) last_data_block = GET_FLASH_BLOCK_IDX(fse.data_block);
+        CHECK_OK_RETURN(last_data_block);
+        f->meta.data.last_block = last_data_block.value;
+        RESULT(uint32_t) last_fill = GET_FLASH_U32(fse.data_block_fill_level);
+        CHECK_OK_RETURN(last_fill);
+        f->meta.data.last_block_fill = last_fill.value;
 
         return fd.value;
     } else if (ret == RET_NOT_FOUND && creat) {
@@ -424,7 +439,7 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
 
             file_indir_entry_t fie;
             memset(&fie, 0xFF, sizeof(file_indir_entry_t));
-            fie.seq_block[0] = seq_block_idx.value;
+            SET_FLASH_BLOCK_IDX(fie.seq_block[0], seq_block_idx.value);
             mark_entry_used(&fie.f);
 
             r2f2_ret ie_ret = write_file_indir_entry(
@@ -447,13 +462,13 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
         file_seq_entry_t fse;
         memset(&fse, 0xFF, sizeof(file_seq_entry_t));
 
-        fse.data_block = f->meta.data.last_block;
-        fse.data_block_fill_level = f->meta.data.last_block_fill;
+        SET_FLASH_BLOCK_IDX(fse.data_block, f->meta.data.last_block);
+        SET_FLASH_U32(fse.data_block_fill_level, f->meta.data.last_block_fill);
         R2F2_ASSERT(f->file_size, >, 0, "%zu");
-        fse.data_block_offset_in_file =
-            fs->cfg->geom.block_size *
-            ((f->file_size - 1) / fs->cfg->geom.block_size);
-        fse.current_file_size = f->file_size;
+        SET_FLASH_U32(fse.data_block_offset_in_file,
+                      fs->cfg->geom.block_size *
+                          ((f->file_size - 1) / fs->cfg->geom.block_size));
+        SET_FLASH_U32(fse.current_file_size, f->file_size);
         mark_entry_used(&fse.f);
 
         /* write the entry, then persist via flags */
