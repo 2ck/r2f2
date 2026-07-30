@@ -1,7 +1,5 @@
 #pragma once
 
-#include "util/helpers.h"
-#include "util/logger.h"
 #include "util/result_type.h"
 #include <fcntl.h>
 #include <stdbool.h>
@@ -52,31 +50,7 @@ typedef struct __attribute__((packed)) flash_u32_t {
     uint8_t ecc[ECC_BCH_LEN];
 } flash_u32;
 
-/* TODO: move out of header? */
-static inline RESULT(uint32_t) get_flash_u32(struct bch_control *bch,
-                                             flash_u32 u) {
-    if (!bch) {
-        return RESULT_ERR(uint32_t, RET_EINVAL);
-    }
-
-    uint32_t err_loc[ECC_BCH_T] = {0};
-    int dec_ret =
-        decode_bch(bch, u.data, sizeof(u.data), u.ecc, NULL, NULL, err_loc);
-    if (dec_ret < 0) {
-        if (!is_all_one(&u, sizeof(flash_u32))) {
-            return RESULT_ERR(uint32_t, RET_ECC_ERR);
-        }
-        /* we ignore errors due to uninitialized flash */
-    } else {
-        for (int i = 0; i < dec_ret; i++) {
-            uint32_t loc = err_loc[i];
-            u.data[loc / 8] ^= (1 << (loc % 8));
-        }
-    }
-    uint32_t retval = ((uint32_t)u.data[0] << 0) | ((uint32_t)u.data[1] << 8) |
-                      ((uint32_t)u.data[2] << 16) | ((uint32_t)u.data[3] << 24);
-    return RESULT_OK(uint32_t, retval);
-}
+RESULT(uint32_t) get_flash_u32(struct bch_control *bch, flash_u32 u);
 #  define GET_FLASH_U32(u) get_flash_u32(fs->bch, u)
 
 #  define SET_FLASH_U32(u, val)                                                \

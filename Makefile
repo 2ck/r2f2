@@ -3,7 +3,7 @@ AR ?= ar
 
 CFLAGS += -MMD -MP
 
-SRCS = r2f2.c r2f2_alloc.c r2f2_file.c r2f2_gc.c r2f2_metadata.c util/helpers.c
+SRCS = r2f2.c r2f2_alloc.c r2f2_defines.c r2f2_file.c r2f2_gc.c r2f2_metadata.c util/helpers.c
 SRCS += ecc/bch/bch.c
 OBJS = $(patsubst %.c,build/%.o,$(SRCS))
 
