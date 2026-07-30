@@ -151,11 +151,13 @@ static void load_ecc8(struct bch_control *bch, uint32_t *dst,
     unsigned int i, nwords = BCH_ECC_WORDS(bch) - 1;
 
     for (i = 0; i < nwords; i++, src += 4) {
-        dst[i] = (src[0] << 24) | (src[1] << 16) | (src[2] << 8) | src[3];
+        dst[i] = ((uint32_t)src[0] << 24) | ((uint32_t)src[1] << 16) |
+                 ((uint32_t)src[2] << 8) | (uint32_t)src[3];
     }
 
     memcpy(pad, src, BCH_ECC_BYTES(bch) - 4 * nwords);
-    dst[nwords] = (pad[0] << 24) | (pad[1] << 16) | (pad[2] << 8) | pad[3];
+    dst[nwords] = ((uint32_t)pad[0] << 24) | ((uint32_t)pad[1] << 16) |
+                  ((uint32_t)pad[2] << 8) | (uint32_t)pad[3];
 }
 
 /*
