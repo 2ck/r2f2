@@ -463,9 +463,15 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
             f->meta.seq.next_entry = 0;
         }
 
+        entry_flags_t fse_flags;
+        memset(&fse_flags, 0xFF, sizeof(entry_flags_t));
+        fse_flags = mark_entry_used(fse_flags);
+        ret = write_file_seq_entry_flags(fs, f->meta.seq.last_block,
+                                         f->meta.seq.next_entry, &fse_flags);
+        CHECK_OK_BASIC(ret);
+
         file_seq_entry_t fse;
         memset(&fse, 0xFF, sizeof(file_seq_entry_t));
-
         SET_FLASH_BLOCK_IDX(fse.data_block, f->meta.data.last_block);
         SET_FLASH_U32(fse.data_block_fill_level, f->meta.data.last_block_fill);
         R2F2_ASSERT(f->file_size, >, 0, "%zu");
@@ -473,16 +479,15 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
                       fs->cfg->geom.block_size *
                           ((f->file_size - 1) / fs->cfg->geom.block_size));
         SET_FLASH_U32(fse.current_file_size, f->file_size);
-        fse.f = mark_entry_used(fse.f);
 
         /* write the entry, then persist via flags */
         write_file_seq_entry(fs, f->meta.seq.last_block, f->meta.seq.next_entry,
                              &fse);
 
-        fse.f = mark_entry_committed(fse.f);
-        entry_flags_t new_f = fse.f;
-        write_file_seq_entry_flags(fs, f->meta.seq.last_block,
-                                   f->meta.seq.next_entry, &new_f);
+        fse_flags = mark_entry_committed(fse_flags);
+        ret = write_file_seq_entry_flags(fs, f->meta.seq.last_block,
+                                         f->meta.seq.next_entry, &fse_flags);
+        CHECK_OK_BASIC(ret);
 
         f->meta.seq.next_entry++;
 

@@ -112,8 +112,6 @@ typedef struct __attribute__((packed)) file_indir_block {
 } file_indir_block_t;
 
 typedef struct __attribute__((packed)) file_seq_entry {
-    entry_flags_t f;
-
     flash_block_idx data_block;
     flash_u32 data_block_fill_level;
 
@@ -123,6 +121,7 @@ typedef struct __attribute__((packed)) file_seq_entry {
 } file_seq_entry_t;
 
 typedef struct __attribute__((packed)) file_seq_block {
+    entry_flags_t f[NUM_FILE_SEQ_ENTRIES];
     struct file_seq_entry entries[NUM_FILE_SEQ_ENTRIES];
 } file_seq_block_t;
 

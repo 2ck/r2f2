@@ -280,11 +280,11 @@ r2f2_ret read_file_seq_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
         return RET_OOB;
     }
 
-    r2f2_ret ret = fs->cfg->flash_read(
-        fs,
-        b * fs->cfg->geom.block_size + offsetof(file_seq_block_t, entries) +
-            offsetof(file_seq_entry_t, f) + idx * sizeof(file_seq_entry_t),
-        sizeof(entry_flags_t), buf);
+    r2f2_ret ret = fs->cfg->flash_read(fs,
+                                       b * fs->cfg->geom.block_size +
+                                           offsetof(file_seq_block_t, f) +
+                                           idx * sizeof(file_seq_entry_t),
+                                       sizeof(entry_flags_t), buf);
     if (ret != RET_OK) {
         R2F2_LOG_ERR(
             "failed (%d) to read file_seq_entry %u flags in block %u, buf %p",
@@ -299,11 +299,11 @@ r2f2_ret write_file_seq_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
         return RET_OOB;
     }
 
-    r2f2_ret ret = fs->cfg->flash_write(
-        fs,
-        b * fs->cfg->geom.block_size + offsetof(file_seq_block_t, entries) +
-            offsetof(file_seq_entry_t, f) + idx * sizeof(file_seq_entry_t),
-        sizeof(entry_flags_t), buf);
+    r2f2_ret ret = fs->cfg->flash_write(fs,
+                                        b * fs->cfg->geom.block_size +
+                                            offsetof(file_seq_block_t, f) +
+                                            idx * sizeof(file_seq_entry_t),
+                                        sizeof(entry_flags_t), buf);
     if (ret != RET_OK) {
         R2F2_LOG_ERR(
             "failed (%d) to write file_seq_entry %u flags in block %u, buf %p",
@@ -366,17 +366,18 @@ RESULT(uint32_t) get_free_file_indir_entry(r2f2_fs_t *fs,
 }
 RESULT(uint32_t) get_free_file_seq_entry(r2f2_fs_t *fs,
                                          block_idx file_seq_block_idx) {
-    file_seq_entry_t fse;
-    /* initialize as an unused entry (0xFF in flash) */
-    memset(&fse, 0xFF, sizeof(file_seq_entry_t));
+    entry_flags_t fse_flags;
+    /* initialize as unused (0xFF in flash) */
+    memset(&fse_flags, 0xFF, sizeof(entry_flags_t));
 
     for (size_t i = 0; i < NUM_FILE_SEQ_ENTRIES; i++) {
-        r2f2_ret ret = read_file_seq_entry(fs, file_seq_block_idx, i, &fse);
+        r2f2_ret ret =
+            read_file_seq_entry_flags(fs, file_seq_block_idx, i, &fse_flags);
         if (ret != RET_OK) {
-            R2F2_LOG_ERR("file_seq_entry read failed");
+            R2F2_LOG_ERR("file_seq_entry flags read failed");
             return RESULT_ERR(uint32_t, ret);
         }
-        if (is_entry_used(fse.f) == ENTRY_FLAG_UNSET) {
+        if (is_entry_used(fse_flags) == ENTRY_FLAG_UNSET) {
             return RESULT_OK(uint32_t, i);
         }
     }
@@ -480,16 +481,26 @@ RESULT(block_idx) find_data_block_for_off(r2f2_fs_t *fs,
             /* check the expected and subsequent indir entries */
             for (size_t j = start_from_seq_entry; j < NUM_FILE_SEQ_ENTRIES;
                  j++) {
-                file_seq_entry_t fse;
                 flash_block_idx next[NUM_NEXT_PTRS];
                 memcpy(next, fie.seq_block, sizeof(next));
                 RESULT(block_idx) seq_block = get_valid_next_block(fs, next);
                 if (seq_block.code != RET_OK) {
                     return RESULT_ERR(block_idx, seq_block.code);
                 }
-                read_file_seq_entry(fs, seq_block.value, j, &fse);
-                if (is_entry_used(fse.f) == ENTRY_FLAG_SET &&
-                    is_entry_committed(fse.f) == ENTRY_FLAG_SET) {
+                entry_flags_t fse_flags;
+                memset(&fse_flags, 0xFF, sizeof(entry_flags_t));
+                ret = read_file_seq_entry_flags(fs, seq_block.value, j,
+                                                &fse_flags);
+                if (ret != RET_OK) {
+                    return RESULT_ERR(block_idx, ret);
+                }
+                if (is_entry_used(fse_flags) == ENTRY_FLAG_SET &&
+                    is_entry_committed(fse_flags) == ENTRY_FLAG_SET) {
+                    file_seq_entry_t fse;
+                    ret = read_file_seq_entry(fs, seq_block.value, j, &fse);
+                    if (ret != RET_OK) {
+                        return RESULT_ERR(block_idx, ret);
+                    }
                     /* R2F2_LOG_DEBUG( */
                     /*     "looking for offset %zu, block covers range %u -
                      * %u",
@@ -537,10 +548,20 @@ RESULT(block_idx) find_data_block_for_off_direct(r2f2_fs_t *fs,
 
     size_t start_from_seq_entry = expected_seq_entry;
     for (size_t j = start_from_seq_entry; j < NUM_FILE_SEQ_ENTRIES; j++) {
-        file_seq_entry_t fse;
-        read_file_seq_entry(fs, file_seq_block_idx, j, &fse);
-        if (is_entry_used(fse.f) == ENTRY_FLAG_SET &&
-            is_entry_committed(fse.f) == ENTRY_FLAG_SET) {
+        entry_flags_t fse_flags;
+        memset(&fse_flags, 0xFF, sizeof(entry_flags_t));
+        r2f2_ret ret =
+            read_file_seq_entry_flags(fs, file_seq_block_idx, j, &fse_flags);
+        if (ret != RET_OK) {
+            return RESULT_ERR(block_idx, ret);
+        }
+        if (is_entry_used(fse_flags) == ENTRY_FLAG_SET &&
+            is_entry_committed(fse_flags) == ENTRY_FLAG_SET) {
+            file_seq_entry_t fse;
+            ret = read_file_seq_entry(fs, file_seq_block_idx, j, &fse);
+            if (ret != RET_OK) {
+                return RESULT_ERR(block_idx, ret);
+            }
             RESULT(uint32_t) fse_off =
                 GET_FLASH_U32(fse.data_block_offset_in_file);
             CHECK_OK_PROPAGATE(fse_off, block_idx);
@@ -661,11 +682,14 @@ void dump_file_seq_block(FILE *f, r2f2_fs_t *fs, block_idx prev_block,
             "\nlabel=\"{file_seq_block %u | { ",
             file_seq_block, file_seq_block);
 
-    file_seq_entry_t fse;
+    entry_flags_t fse_flags;
+    memset(&fse_flags, 0xFF, sizeof(entry_flags_t));
     for (size_t i = 0; i < NUM_FILE_SEQ_ENTRIES; i++) {
-        read_file_seq_entry(fs, file_seq_block, i, &fse);
-        if (is_entry_used(fse.f) == ENTRY_FLAG_SET &&
-            is_entry_committed(fse.f) == ENTRY_FLAG_SET) {
+        read_file_seq_entry_flags(fs, file_seq_block, i, &fse_flags);
+        if (is_entry_used(fse_flags) == ENTRY_FLAG_SET &&
+            is_entry_committed(fse_flags) == ENTRY_FLAG_SET) {
+            file_seq_entry_t fse;
+            read_file_seq_entry(fs, file_seq_block, i, &fse);
             fprintf(f, "{fill %u | offs %u | file size %u | data block %u} | ",
                     GET_FLASH_U32(fse.data_block_fill_level).value,
                     GET_FLASH_U32(fse.data_block_offset_in_file).value,
