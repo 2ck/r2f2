@@ -18,8 +18,13 @@ RESULT(uint32_t) r2f2_gc_entry(r2f2_fs_t *fs, size_t target) {
             continue;
         }
 
-        if (is_entry_reclaimable(dme.f) == ENTRY_FLAG_SET) {
-            uint32_t freed_blocks = r2f2_reclaim_file_blocks(fs, &dme);
+        entry_flags_t flags;
+        r2f2_ret ret = read_dir_meta_entry_flags(fs, dir_block, d, &flags);
+        if (ret != RET_OK) {
+            return RESULT_ERR(uint32_t, ret);
+        }
+        if (is_entry_reclaimable(flags) == ENTRY_FLAG_SET) {
+            uint32_t freed_blocks = r2f2_reclaim_file_blocks(fs, &dme, flags);
             /* overwrite dir entry */
             memset(&dme, 0, sizeof(dir_meta_entry_t));
             r2f2_ret ret = write_dir_meta_entry(fs, dir_block, d, &dme);
@@ -55,7 +60,8 @@ RESULT(uint32_t) r2f2_gc_entry(r2f2_fs_t *fs, size_t target) {
     return RESULT_ERR(uint32_t, RET_NOMEM);
 }
 
-uint32_t r2f2_reclaim_file_blocks(r2f2_fs_t *fs, dir_meta_entry_t *dme) {
+uint32_t r2f2_reclaim_file_blocks(r2f2_fs_t *fs, dir_meta_entry_t *dme,
+                                  entry_flags_t flags) {
     uint32_t freed = 0;
     flash_block_idx next[NUM_NEXT_PTRS];
     memcpy(next, dme->next_block, sizeof(next));
@@ -65,7 +71,7 @@ uint32_t r2f2_reclaim_file_blocks(r2f2_fs_t *fs, dir_meta_entry_t *dme) {
          * entry 0 is always a seq_block, which is only upgraded to an
          * indir_block starting from the next entry
          */
-        if (is_entry_indirect(dme->f) == ENTRY_FLAG_SET) {
+        if (is_entry_indirect(flags) == ENTRY_FLAG_SET) {
             freed += r2f2_reclaim_indir_block(fs, next_block.value);
         } else {
             freed += r2f2_reclaim_seq_block(fs, next_block.value);

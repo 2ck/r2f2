@@ -126,11 +126,11 @@ r2f2_ret read_dir_meta_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
         return RET_OOB;
     }
 
-    r2f2_ret ret = fs->cfg->flash_read(
-        fs,
-        b * fs->cfg->geom.block_size + offsetof(dir_meta_block_t, entries) +
-            offsetof(dir_meta_entry_t, f) + idx * sizeof(dir_meta_entry_t),
-        sizeof(entry_flags_t), buf);
+    r2f2_ret ret = fs->cfg->flash_read(fs,
+                                       b * fs->cfg->geom.block_size +
+                                           offsetof(dir_meta_block_t, f) +
+                                           idx * sizeof(entry_flags_t),
+                                       sizeof(entry_flags_t), buf);
     if (ret != RET_OK) {
         R2F2_LOG_ERR(
             "failed (%d) to read dir_meta_entry %u flags in block %u, buf %p",
@@ -145,11 +145,11 @@ r2f2_ret write_dir_meta_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
         return RET_OOB;
     }
 
-    r2f2_ret ret = fs->cfg->flash_write(
-        fs,
-        b * fs->cfg->geom.block_size + offsetof(dir_meta_block_t, entries) +
-            offsetof(dir_meta_entry_t, f) + idx * sizeof(dir_meta_entry_t),
-        sizeof(entry_flags_t), buf);
+    r2f2_ret ret = fs->cfg->flash_write(fs,
+                                        b * fs->cfg->geom.block_size +
+                                            offsetof(dir_meta_block_t, f) +
+                                            idx * sizeof(entry_flags_t),
+                                        sizeof(entry_flags_t), buf);
     if (ret != RET_OK) {
         R2F2_LOG_ERR(
             "failed (%d) to write dir_meta_entry %u flags in block %u, buf %p",
@@ -328,17 +328,18 @@ bool is_fs_valid(r2f2_fs_t *fs, r2f2_fs_info_t *fs_info) {
 
 RESULT(uint32_t) get_free_dir_meta_entry(r2f2_fs_t *fs,
                                          block_idx dir_block_idx) {
-    dir_meta_entry_t dme;
-    /* initialize as an unused entry (0xFF in flash) */
-    memset(&dme, 0xFF, sizeof(dir_meta_entry_t));
+    entry_flags_t dme_flags;
+    /* initialize as unused (0xFF in flash) */
+    memset(&dme_flags, 0xFF, sizeof(entry_flags_t));
 
     for (size_t i = 0; i < NUM_DIR_META_ENTRIES; i++) {
-        r2f2_ret ret = read_dir_meta_entry(fs, dir_block_idx, i, &dme);
+        r2f2_ret ret =
+            read_dir_meta_entry_flags(fs, dir_block_idx, i, &dme_flags);
         if (ret != RET_OK) {
-            R2F2_LOG_ERR("dir meta entry read failed");
+            R2F2_LOG_ERR("dir meta entry flags read failed");
             return RESULT_ERR(uint32_t, ret);
         }
-        if (is_entry_used(dme.f) == ENTRY_FLAG_UNSET) {
+        if (is_entry_used(dme_flags) == ENTRY_FLAG_UNSET) {
             return RESULT_OK(uint32_t, i);
         }
     }
@@ -583,28 +584,37 @@ r2f2_ret r2f2_get_file_dir_entry(r2f2_fs_t *fs, const char *path,
     do {
         /* search through the entries of the current block */
         for (size_t i = 0; i < NUM_DIR_META_ENTRIES; i++) {
-            r2f2_ret read_ret = read_dir_meta_entry(fs, dmb, i, buf);
-            if (read_ret != RET_OK) {
-                return read_ret;
+            /* first read and check the flags */
+            entry_flags_t flags;
+            r2f2_ret flags_ret = read_dir_meta_entry_flags(fs, dmb, i, &flags);
+            if (flags_ret != RET_OK) {
+                return flags_ret;
             }
 
             /* no more valid entries can come after this one */
-            if (is_entry_used(buf->f) == ENTRY_FLAG_UNSET) {
+            if (is_entry_used(flags) == ENTRY_FLAG_UNSET) {
                 break;
             }
-            if (is_entry_committed(buf->f) == ENTRY_FLAG_UNSET) {
+            if (is_entry_committed(flags) == ENTRY_FLAG_UNSET) {
                 continue;
             }
             /*
              * the file in this entry is unlinked/removed, but it may have been
              * recreated, so keep on searching
              */
-            if (is_entry_reclaimable(buf->f) == ENTRY_FLAG_SET) {
+            if (is_entry_reclaimable(flags) == ENTRY_FLAG_SET) {
                 continue;
+            }
+
+            /* now read the entry */
+            r2f2_ret read_ret = read_dir_meta_entry(fs, dmb, i, buf);
+            if (read_ret != RET_OK) {
+                return read_ret;
             }
 
             if (memcmp(buf->path, file_basename, MAX_PATH_LEN) == 0) {
                 ret->dme_idx = i;
+                ret->dme_flags = flags;
                 ret->dmb_idx = dmb;
                 return RET_OK;
             }
@@ -613,12 +623,12 @@ r2f2_ret r2f2_get_file_dir_entry(r2f2_fs_t *fs, const char *path,
         /* get the next block, if it exists */
         flash_block_idx next[NUM_NEXT_PTRS];
 
-        r2f2_ret ret = fs->cfg->flash_read(fs,
-                                           dmb * fs->cfg->geom.block_size +
-                                               offsetof(dir_meta_block_t, next),
-                                           sizeof(next), next);
-        if (ret != RET_OK) {
-            return ret;
+        r2f2_ret read_ret = fs->cfg->flash_read(
+            fs,
+            dmb * fs->cfg->geom.block_size + offsetof(dir_meta_block_t, next),
+            sizeof(next), next);
+        if (read_ret != RET_OK) {
+            return read_ret;
         }
 
         RESULT(block_idx) next_block = get_valid_next_block(fs, next);
@@ -725,13 +735,15 @@ void dump_dir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block) {
                 R2F2_LOG_ERR("no valid next block");
                 return;
             }
+            entry_flags_t flags;
+            read_dir_meta_entry_flags(fs, dir_block, d, &flags);
             fprintf(f,
                     "{ \\\"%s\\\" | used=%d,comm=%d,\\\nindir=%d,recl=%d | "
                     "<e%zu> %u} | ",
-                    dme.path, is_entry_used(dme.f) == ENTRY_FLAG_SET,
-                    is_entry_committed(dme.f) == ENTRY_FLAG_SET,
-                    is_entry_indirect(dme.f) == ENTRY_FLAG_SET,
-                    is_entry_reclaimable(dme.f) == ENTRY_FLAG_SET, d,
+                    dme.path, is_entry_used(flags) == ENTRY_FLAG_SET,
+                    is_entry_committed(flags) == ENTRY_FLAG_SET,
+                    is_entry_indirect(flags) == ENTRY_FLAG_SET,
+                    is_entry_reclaimable(flags) == ENTRY_FLAG_SET, d,
                     next_block.value);
         }
     }
@@ -749,7 +761,9 @@ void dump_dir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block) {
                 R2F2_LOG_ERR("no valid next block");
                 return;
             }
-            if (is_entry_indirect(dme.f) == ENTRY_FLAG_SET) {
+            entry_flags_t flags;
+            read_dir_meta_entry_flags(fs, dir_block, d, &flags);
+            if (is_entry_indirect(flags) == ENTRY_FLAG_SET) {
                 dump_file_indir_block(f, fs, dir_block, d, next_block.value);
             } else {
                 dump_file_seq_block(f, fs, dir_block, d, next_block.value, 1);

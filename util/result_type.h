@@ -43,3 +43,11 @@ typedef enum {
             return RESULT_ERR(type, _code);                                    \
         }                                                                      \
     } while (0)
+
+#define CHECK_OK_BASIC(code)                                                   \
+    do {                                                                       \
+        ret_code_t _code = (code);                                             \
+        if (_code != RET_OK) {                                                 \
+            return _code;                                                      \
+        }                                                                      \
+    } while (0)

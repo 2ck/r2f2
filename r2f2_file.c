@@ -79,19 +79,25 @@ RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path) {
 
         dir_meta_entry_t dme;
         memset(&dme, 0xFF, sizeof(dir_meta_entry_t));
+        entry_flags_t flags;
+        memset(&flags, 0xFF, sizeof(entry_flags_t));
 
         bool found_entry = false;
         for (size_t i = 0; i < NUM_DIR_META_ENTRIES; i++) {
-            read_dir_meta_entry(fs, current_block, i, &dme);
-
+            r2f2_ret flags_ret =
+                read_dir_meta_entry_flags(fs, current_block, i, &flags);
+            if (flags_ret != RET_OK) {
+                return RESULT_ERR(block_idx, flags_ret);
+            }
             /*
              * abort as soon as we find our first unused entry (no more valid
              * ones can come after)
              */
-            if (!is_entry_used(dme.f)) {
+            if (!is_entry_used(flags)) {
                 break;
             }
 
+            read_dir_meta_entry(fs, current_block, i, &dme);
             if (memcmp(dme.path, segment, MAX_PATH_LEN) == 0) {
                 flash_block_idx next[NUM_NEXT_PTRS];
                 memcpy(next, dme.next_block, sizeof(next));
@@ -222,11 +228,8 @@ r2f2_ret r2f2_migrate_file_to_indir_block(r2f2_fs_t *fs, r2f2_fd fd) {
     /* update our dir_meta_entry */
 
     dir_meta_entry_t dme;
-    r2f2_ret dme_ret =
-        read_dir_meta_entry(fs, f->meta.dir.block, f->meta.dir.entry, &dme);
-    if (dme_ret != RET_OK) {
-        return dme_ret;
-    }
+    ret = read_dir_meta_entry(fs, f->meta.dir.block, f->meta.dir.entry, &dme);
+    CHECK_OK_BASIC(ret);
 
     uint32_t free_next_ptr = NUM_NEXT_PTRS;
     for (size_t i = 0; i < NUM_NEXT_PTRS; i++) {
@@ -244,13 +247,20 @@ r2f2_ret r2f2_migrate_file_to_indir_block(r2f2_fs_t *fs, r2f2_fd fd) {
         return RET_ERR;
     }
     SET_FLASH_BLOCK_IDX(dme.next_block[free_next_ptr], indir_block_idx.value);
-    dme.f = mark_entry_indirect(dme.f);
 
-    dme_ret =
-        write_dir_meta_entry(fs, f->meta.dir.block, f->meta.dir.entry, &dme);
-    if (dme_ret != RET_OK) {
-        return dme_ret;
-    }
+    entry_flags_t dme_flags;
+    memset(&dme_flags, 0xFF, sizeof(entry_flags_t));
+    ret = read_dir_meta_entry_flags(fs, f->meta.dir.block, f->meta.dir.entry,
+                                    &dme_flags);
+    CHECK_OK_BASIC(ret);
+
+    dme_flags = mark_entry_indirect(dme_flags);
+    ret = write_dir_meta_entry_flags(fs, f->meta.dir.block, f->meta.dir.entry,
+                                     &dme_flags);
+    CHECK_OK_BASIC(ret);
+
+    ret = write_dir_meta_entry(fs, f->meta.dir.block, f->meta.dir.entry, &dme);
+    CHECK_OK_BASIC(ret);
 
     f->meta.indir.block = indir_block_idx.value;
 
@@ -321,18 +331,24 @@ RESULT(r2f2_fd) r2f2_register_file(r2f2_fs_t *fs, const char *path) {
     memset(dme.next_block, 0xFF, sizeof(dme.next_block));
     SET_FLASH_BLOCK_IDX(dme.next_block[0], file_seq_block_idx.value);
 
-    dme.f = mark_entry_used(dme.f);
+    entry_flags_t flags;
+    memset(&flags, 0xFF, sizeof(entry_flags_t));
+    flags = mark_entry_used(flags);
+    r2f2_ret ret = write_dir_meta_entry_flags(fs, dir_meta_block_idx.value,
+                                              dme_num.value, &flags);
+    if (ret != RET_OK) {
+        return RESULT_ERR(r2f2_fd, ret);
+    }
 
-    r2f2_ret ret =
+    ret =
         write_dir_meta_entry(fs, dir_meta_block_idx.value, dme_num.value, &dme);
     if (ret != RET_OK) {
         return RESULT_ERR(r2f2_fd, ret);
     }
 
-    dme.f = mark_entry_committed(dme.f);
-    entry_flags_t new_f = dme.f;
+    flags = mark_entry_committed(flags);
     ret = write_dir_meta_entry_flags(fs, dir_meta_block_idx.value,
-                                     dme_num.value, &new_f);
+                                     dme_num.value, &flags);
     if (ret != RET_OK) {
         return RESULT_ERR(r2f2_fd, ret);
     }

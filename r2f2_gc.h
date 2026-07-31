@@ -5,7 +5,8 @@
 
 RESULT(uint32_t) r2f2_gc_entry(r2f2_fs_t *fs, size_t target);
 
-uint32_t r2f2_reclaim_file_blocks(r2f2_fs_t *fs, dir_meta_entry_t *dme);
+uint32_t r2f2_reclaim_file_blocks(r2f2_fs_t *fs, dir_meta_entry_t *dme,
+                                  entry_flags_t flags);
 
 uint32_t r2f2_reclaim_indir_block(r2f2_fs_t *fs, block_idx file_indir_block);
 

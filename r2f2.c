@@ -108,7 +108,7 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
          * The dir_meta_entry could point directly to a file_seq_block, or do so
          * via a file_indir_block, and the flags tell us how it is.
          */
-        if (is_entry_indirect(dme.f) == ENTRY_FLAG_SET) {
+        if (is_entry_indirect(dir_ret.dme_flags) == ENTRY_FLAG_SET) {
             indir_block_idx = next_block.value;
             RESULT(uint32_t) last_fie =
                 get_last_file_indir_entry(fs, indir_block_idx);
@@ -501,8 +501,7 @@ r2f2_ret r2f2_remove(r2f2_fs_t *fs, const char *path) {
         return ret;
     }
 
-    dme.f = mark_entry_reclaimable(dme.f);
-    entry_flags_t new_f = dme.f;
+    entry_flags_t new_f = mark_entry_reclaimable(dir_ret.dme_flags);
     ret = write_dir_meta_entry_flags(fs, dir_ret.dmb_idx, dir_ret.dme_idx,
                                      &new_f);
     return ret;

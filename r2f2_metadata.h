@@ -85,12 +85,12 @@ entry_flag_state_t is_entry_reclaimable(entry_flags_t f);
 entry_flag_state_t is_entry_indirect(entry_flags_t f);
 
 typedef struct __attribute__((packed)) dir_meta_entry {
-    entry_flags_t f;
     char path[MAX_PATH_LEN];
     flash_block_idx next_block[NUM_NEXT_PTRS];
 } dir_meta_entry_t;
 
 typedef struct dir_meta_block {
+    entry_flags_t f[NUM_DIR_META_ENTRIES];
     struct dir_meta_entry entries[NUM_DIR_META_ENTRIES];
     flash_block_idx next[NUM_NEXT_PTRS];
 } dir_meta_block_t;
@@ -191,6 +191,7 @@ RESULT(block_idx) find_data_block_for_off_direct(r2f2_fs_t *fs,
 struct dir_traversal_ret {
     block_idx dmb_idx;
     uint32_t dme_idx;
+    entry_flags_t dme_flags;
 };
 
 r2f2_ret r2f2_get_file_dir_entry(r2f2_fs_t *fs, const char *path,
