@@ -96,13 +96,13 @@ typedef struct dir_meta_block {
 } dir_meta_block_t;
 
 typedef struct __attribute__((packed)) file_indir_entry {
-    entry_flags_t f;
-
     flash_block_idx seq_block[NUM_NEXT_PTRS];
 } file_indir_entry_t;
 
 typedef struct __attribute__((packed)) file_indir_block {
     char path[MAX_PATH_LEN];
+
+    entry_flags_t f[NUM_FILE_INDIR_ENTRIES];
 
     struct file_indir_entry entries[NUM_FILE_INDIR_ENTRIES];
 

@@ -202,28 +202,27 @@ r2f2_ret r2f2_migrate_file_to_indir_block(r2f2_fs_t *fs, r2f2_fd fd) {
     fildes_t *f = &fs->fds[fd];
 
     RESULT(block_idx) indir_block_idx = allocate_block(fs);
-    if (indir_block_idx.code != RET_OK) {
-        return indir_block_idx.code;
-    }
+    CHECK_OK_RETURN(indir_block_idx);
 
     /* create initial indir_entry in our new indir_block */
+
+    entry_flags_t fie_flags;
+    memset(&fie_flags, 0xFF, sizeof(entry_flags_t));
+    fie_flags = mark_entry_used(fie_flags);
+    r2f2_ret ret =
+        write_file_indir_entry_flags(fs, indir_block_idx.value, 0, &fie_flags);
+    CHECK_OK_BASIC(ret);
 
     file_indir_entry_t fie;
     memset(&fie, 0xFF, sizeof(file_indir_entry_t));
     SET_FLASH_BLOCK_IDX(fie.seq_block[0], f->meta.seq.last_block);
-    fie.f = mark_entry_used(fie.f);
-    r2f2_ret ie_ret =
-        write_file_indir_entry(fs, indir_block_idx.value, 0, &fie);
+    ret = write_file_indir_entry(fs, indir_block_idx.value, 0, &fie);
+    CHECK_OK_BASIC(ret);
 
-    if (ie_ret != RET_OK) {
-        return ie_ret;
-    }
-    fie.f = mark_entry_committed(fie.f);
-    entry_flags_t new_f = fie.f;
-    ie_ret = write_file_indir_entry_flags(fs, indir_block_idx.value, 0, &new_f);
-    if (ie_ret != RET_OK) {
-        return ie_ret;
-    }
+    fie_flags = mark_entry_committed(fie_flags);
+    ret =
+        write_file_indir_entry_flags(fs, indir_block_idx.value, 0, &fie_flags);
+    CHECK_OK_BASIC(ret);
 
     /* update our dir_meta_entry */
 

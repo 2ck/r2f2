@@ -203,11 +203,11 @@ r2f2_ret read_file_indir_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
         return RET_OOB;
     }
 
-    r2f2_ret ret = fs->cfg->flash_read(
-        fs,
-        b * fs->cfg->geom.block_size + offsetof(file_indir_block_t, entries) +
-            offsetof(file_indir_entry_t, f) + idx * sizeof(file_indir_entry_t),
-        sizeof(entry_flags_t), buf);
+    r2f2_ret ret = fs->cfg->flash_read(fs,
+                                       b * fs->cfg->geom.block_size +
+                                           offsetof(file_indir_block_t, f) +
+                                           idx * sizeof(file_indir_entry_t),
+                                       sizeof(entry_flags_t), buf);
     if (ret != RET_OK) {
         R2F2_LOG_ERR("failed (%d) to read file_indir_entry %u flags in block "
                      "%u, buf %p",
@@ -222,11 +222,11 @@ r2f2_ret write_file_indir_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
         return RET_OOB;
     }
 
-    r2f2_ret ret = fs->cfg->flash_write(
-        fs,
-        b * fs->cfg->geom.block_size + offsetof(file_indir_block_t, entries) +
-            offsetof(file_indir_entry_t, f) + idx * sizeof(file_indir_entry_t),
-        sizeof(entry_flags_t), buf);
+    r2f2_ret ret = fs->cfg->flash_write(fs,
+                                        b * fs->cfg->geom.block_size +
+                                            offsetof(file_indir_block_t, f) +
+                                            idx * sizeof(file_indir_entry_t),
+                                        sizeof(entry_flags_t), buf);
     if (ret != RET_OK) {
         R2F2_LOG_ERR("failed (%d) to write file_indir_entry %u flags in block "
                      "%u, buf %p",
@@ -347,17 +347,18 @@ RESULT(uint32_t) get_free_dir_meta_entry(r2f2_fs_t *fs,
 }
 RESULT(uint32_t) get_free_file_indir_entry(r2f2_fs_t *fs,
                                            block_idx file_indir_block_idx) {
-    file_indir_entry_t fie;
-    /* initialize as an unused entry (0xFF in flash) */
-    memset(&fie, 0xFF, sizeof(file_indir_entry_t));
+    entry_flags_t fie_flags;
+    /* initialize as unused (0xFF in flash) */
+    memset(&fie_flags, 0xFF, sizeof(entry_flags_t));
 
     for (size_t i = 0; i < NUM_FILE_INDIR_ENTRIES; i++) {
-        r2f2_ret ret = read_file_indir_entry(fs, file_indir_block_idx, i, &fie);
+        r2f2_ret ret = read_file_indir_entry_flags(fs, file_indir_block_idx, i,
+                                                   &fie_flags);
         if (ret != RET_OK) {
-            R2F2_LOG_ERR("file indir entry read failed");
+            R2F2_LOG_ERR("file indir entry flags read failed");
             return RESULT_ERR(uint32_t, ret);
         }
-        if (is_entry_used(fie.f) == ENTRY_FLAG_UNSET) {
+        if (is_entry_used(fie_flags) == ENTRY_FLAG_UNSET) {
             return RESULT_OK(uint32_t, i);
         }
     }
@@ -462,10 +463,20 @@ RESULT(block_idx) find_data_block_for_off(r2f2_fs_t *fs,
     size_t start_from_seq_entry = expected_seq_entry;
 
     for (size_t i = start_from_indir_entry; i < NUM_FILE_INDIR_ENTRIES; i++) {
-        file_indir_entry_t fie;
-        read_file_indir_entry(fs, file_indir_block_idx, i, &fie);
-        if (is_entry_used(fie.f) == ENTRY_FLAG_SET &&
-            is_entry_committed(fie.f) == ENTRY_FLAG_SET) {
+        entry_flags_t fie_flags;
+        memset(&fie_flags, 0xFF, sizeof(entry_flags_t));
+        r2f2_ret ret = read_file_indir_entry_flags(fs, file_indir_block_idx, i,
+                                                   &fie_flags);
+        if (ret != RET_OK) {
+            return RESULT_ERR(block_idx, ret);
+        }
+        if (is_entry_used(fie_flags) == ENTRY_FLAG_SET &&
+            is_entry_committed(fie_flags) == ENTRY_FLAG_SET) {
+            file_indir_entry_t fie;
+            ret = read_file_indir_entry(fs, file_indir_block_idx, i, &fie);
+            if (ret != RET_OK) {
+                return RESULT_ERR(block_idx, ret);
+            }
             /* check the expected and subsequent indir entries */
             for (size_t j = start_from_seq_entry; j < NUM_FILE_SEQ_ENTRIES;
                  j++) {

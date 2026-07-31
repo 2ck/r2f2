@@ -437,24 +437,27 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
                 return new_indir_entry_num.code;
             }
 
+            entry_flags_t fie_flags;
+            memset(&fie_flags, 0xFF, sizeof(entry_flags_t));
+            ret = read_file_indir_entry_flags(
+                fs, f->meta.indir.block, new_indir_entry_num.value, &fie_flags);
+            CHECK_OK_BASIC(ret);
+            fie_flags = mark_entry_used(fie_flags);
+            ret = write_file_indir_entry_flags(
+                fs, f->meta.indir.block, new_indir_entry_num.value, &fie_flags);
+            CHECK_OK_BASIC(ret);
+
             file_indir_entry_t fie;
             memset(&fie, 0xFF, sizeof(file_indir_entry_t));
             SET_FLASH_BLOCK_IDX(fie.seq_block[0], seq_block_idx.value);
-            fie.f = mark_entry_used(fie.f);
+            ret = write_file_indir_entry(fs, f->meta.indir.block,
+                                         new_indir_entry_num.value, &fie);
+            CHECK_OK_BASIC(ret);
 
-            r2f2_ret ie_ret = write_file_indir_entry(
-                fs, f->meta.indir.block, new_indir_entry_num.value, &fie);
-
-            if (ie_ret != RET_OK) {
-                return ie_ret;
-            }
-            fie.f = mark_entry_committed(fie.f);
-            entry_flags_t new_f = fie.f;
-            ie_ret = write_file_indir_entry_flags(
-                fs, f->meta.indir.block, new_indir_entry_num.value, &new_f);
-            if (ie_ret != RET_OK) {
-                return ie_ret;
-            }
+            fie_flags = mark_entry_committed(fie_flags);
+            ret = write_file_indir_entry_flags(
+                fs, f->meta.indir.block, new_indir_entry_num.value, &fie_flags);
+            CHECK_OK_BASIC(ret);
 
             f->meta.seq.last_block = seq_block_idx.value;
             f->meta.seq.next_entry = 0;
