@@ -108,7 +108,7 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
          * The dir_meta_entry could point directly to a file_seq_block, or do so
          * via a file_indir_block, and the flags tell us how it is.
          */
-        if (is_entry_indirect(dme.f)) {
+        if (is_entry_indirect(dme.f) == ENTRY_FLAG_SET) {
             indir_block_idx = next_block.value;
             RESULT(uint32_t) last_fie =
                 get_last_file_indir_entry(fs, indir_block_idx);
@@ -440,7 +440,7 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
             file_indir_entry_t fie;
             memset(&fie, 0xFF, sizeof(file_indir_entry_t));
             SET_FLASH_BLOCK_IDX(fie.seq_block[0], seq_block_idx.value);
-            mark_entry_used(&fie.f);
+            fie.f = mark_entry_used(fie.f);
 
             r2f2_ret ie_ret = write_file_indir_entry(
                 fs, f->meta.indir.block, new_indir_entry_num.value, &fie);
@@ -448,9 +448,10 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
             if (ie_ret != RET_OK) {
                 return ie_ret;
             }
-            mark_entry_committed(&fie.f);
+            fie.f = mark_entry_committed(fie.f);
+            entry_flags_t new_f = fie.f;
             ie_ret = write_file_indir_entry_flags(
-                fs, f->meta.indir.block, new_indir_entry_num.value, &fie.f);
+                fs, f->meta.indir.block, new_indir_entry_num.value, &new_f);
             if (ie_ret != RET_OK) {
                 return ie_ret;
             }
@@ -469,15 +470,16 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
                       fs->cfg->geom.block_size *
                           ((f->file_size - 1) / fs->cfg->geom.block_size));
         SET_FLASH_U32(fse.current_file_size, f->file_size);
-        mark_entry_used(&fse.f);
+        fse.f = mark_entry_used(fse.f);
 
         /* write the entry, then persist via flags */
         write_file_seq_entry(fs, f->meta.seq.last_block, f->meta.seq.next_entry,
                              &fse);
 
-        mark_entry_committed(&fse.f);
+        fse.f = mark_entry_committed(fse.f);
+        entry_flags_t new_f = fse.f;
         write_file_seq_entry_flags(fs, f->meta.seq.last_block,
-                                   f->meta.seq.next_entry, &fse.f);
+                                   f->meta.seq.next_entry, &new_f);
 
         f->meta.seq.next_entry++;
 
@@ -499,8 +501,9 @@ r2f2_ret r2f2_remove(r2f2_fs_t *fs, const char *path) {
         return ret;
     }
 
-    mark_entry_reclaimable(&dme.f);
+    dme.f = mark_entry_reclaimable(dme.f);
+    entry_flags_t new_f = dme.f;
     ret = write_dir_meta_entry_flags(fs, dir_ret.dmb_idx, dir_ret.dme_idx,
-                                     &dme.f);
+                                     &new_f);
     return ret;
 }

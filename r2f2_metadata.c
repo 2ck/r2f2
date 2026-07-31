@@ -33,36 +33,52 @@ RESULT(block_idx) get_valid_next_block(r2f2_fs_t *fs,
     }
 }
 
-void mark_entry_committed(entry_flags_t *f) {
-    *f &= ~ENTRY_COMMIT_MASK;
+entry_flags_t mark_entry_committed(entry_flags_t f) {
+    return f & ~ENTRY_COMMIT_MASK;
 }
 
-void mark_entry_used(entry_flags_t *f) {
-    *f &= ~ENTRY_USED_MASK;
+entry_flags_t mark_entry_used(entry_flags_t f) {
+    return f & ~ENTRY_USED_MASK;
 }
 
-void mark_entry_reclaimable(entry_flags_t *f) {
-    *f &= ~ENTRY_RECLAIMABLE_MASK;
+entry_flags_t mark_entry_reclaimable(entry_flags_t f) {
+    return f & ~ENTRY_RECLAIMABLE_MASK;
 }
 
-void mark_entry_indirect(entry_flags_t *f) {
-    *f &= ~ENTRY_INDIRECT_MASK;
+entry_flags_t mark_entry_indirect(entry_flags_t f) {
+    return f & ~ENTRY_INDIRECT_MASK;
 }
 
-bool is_entry_committed(entry_flags_t f) {
-    return (f & ENTRY_COMMIT_MASK) == 0;
+static entry_flag_state_t entry_flag_state(entry_flags_t f,
+                                           entry_flags_t mask) {
+#ifdef ECC_ON_METADATA
+    uint32_t ones = __builtin_popcount((unsigned int)(f & mask));
+    if (ones <= 1) {
+        return ENTRY_FLAG_SET;
+    } else if (ones >= 3) {
+        return ENTRY_FLAG_UNSET;
+    } else {
+        return ENTRY_FLAG_INVALID;
+    }
+#else
+    return ((f & mask) == 0) ? ENTRY_FLAG_SET : ENTRY_FLAG_CLEAR;
+#endif
 }
 
-bool is_entry_used(entry_flags_t f) {
-    return (f & ENTRY_USED_MASK) == 0;
+entry_flag_state_t is_entry_committed(entry_flags_t f) {
+    return entry_flag_state(f, ENTRY_COMMIT_MASK);
 }
 
-bool is_entry_reclaimable(entry_flags_t f) {
-    return (f & ENTRY_RECLAIMABLE_MASK) == 0;
+entry_flag_state_t is_entry_used(entry_flags_t f) {
+    return entry_flag_state(f, ENTRY_USED_MASK);
 }
 
-bool is_entry_indirect(entry_flags_t f) {
-    return (f & ENTRY_INDIRECT_MASK) == 0;
+entry_flag_state_t is_entry_reclaimable(entry_flags_t f) {
+    return entry_flag_state(f, ENTRY_RECLAIMABLE_MASK);
+}
+
+entry_flag_state_t is_entry_indirect(entry_flags_t f) {
+    return entry_flag_state(f, ENTRY_INDIRECT_MASK);
 }
 
 r2f2_ret read_dir_meta_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
@@ -149,14 +165,6 @@ r2f2_ret read_file_indir_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
         return RET_OOB;
     }
 
-    /* R2F2_LOG_DEBUG("read file_indir_entry %u in block %u, buf %p", idx, b,
-     * buf); */
-    /* R2F2_LOG_DEBUG("read at b %u * size %u + offset %zu + idx %u * size %zu",
-     * b, */
-    /*                fs->cfg->geom.block_size, */
-    /*                offsetof(file_indir_block_t, entries), idx, */
-    /*                sizeof(file_indir_entry_t)); */
-
     r2f2_ret ret = fs->cfg->flash_read(
         fs,
         b * fs->cfg->geom.block_size + offsetof(file_indir_block_t, entries) +
@@ -175,15 +183,6 @@ r2f2_ret write_file_indir_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
         R2F2_LOG_ERR("out of bounds block %u or entry %u", b, idx);
         return RET_OOB;
     }
-
-    /* R2F2_LOG_DEBUG("write file_indir_entry %u in block %u, buf %p", idx, b,
-     */
-    /*                buf); */
-    /* R2F2_LOG_DEBUG("write at b %u * size %u + offset %zu + idx %u * size
-     * %zu", */
-    /*                b, fs->cfg->geom.block_size, */
-    /*                offsetof(file_indir_block_t, entries), idx, */
-    /*                sizeof(file_indir_entry_t)); */
 
     r2f2_ret ret = fs->cfg->flash_write(
         fs,
@@ -339,7 +338,7 @@ RESULT(uint32_t) get_free_dir_meta_entry(r2f2_fs_t *fs,
             R2F2_LOG_ERR("dir meta entry read failed");
             return RESULT_ERR(uint32_t, ret);
         }
-        if (!is_entry_used(dme.f)) {
+        if (is_entry_used(dme.f) == ENTRY_FLAG_UNSET) {
             return RESULT_OK(uint32_t, i);
         }
     }
@@ -357,7 +356,7 @@ RESULT(uint32_t) get_free_file_indir_entry(r2f2_fs_t *fs,
             R2F2_LOG_ERR("file indir entry read failed");
             return RESULT_ERR(uint32_t, ret);
         }
-        if (!is_entry_used(fie.f)) {
+        if (is_entry_used(fie.f) == ENTRY_FLAG_UNSET) {
             return RESULT_OK(uint32_t, i);
         }
     }
@@ -375,7 +374,7 @@ RESULT(uint32_t) get_free_file_seq_entry(r2f2_fs_t *fs,
             R2F2_LOG_ERR("file_seq_entry read failed");
             return RESULT_ERR(uint32_t, ret);
         }
-        if (!is_entry_used(fse.f)) {
+        if (is_entry_used(fse.f) == ENTRY_FLAG_UNSET) {
             return RESULT_OK(uint32_t, i);
         }
     }
@@ -394,11 +393,11 @@ RESULT(uint32_t) get_last_file_indir_entry(r2f2_fs_t *fs,
         }
 
         /* after the first unused entry, no more valid entries can come */
-        if (!is_entry_used(f)) {
+        if (is_entry_used(f) == ENTRY_FLAG_UNSET) {
             break;
         }
 
-        if (!is_entry_committed(f)) {
+        if (is_entry_committed(f) == ENTRY_FLAG_UNSET) {
             continue;
         }
 
@@ -422,11 +421,11 @@ RESULT(uint32_t) get_last_file_seq_entry(r2f2_fs_t *fs,
         }
 
         /* after the first unused entry, no more valid entries can come */
-        if (!is_entry_used(f)) {
+        if (is_entry_used(f) == ENTRY_FLAG_UNSET) {
             break;
         }
 
-        if (!is_entry_committed(f)) {
+        if (is_entry_committed(f) == ENTRY_FLAG_UNSET) {
             continue;
         }
 
@@ -464,7 +463,8 @@ RESULT(block_idx) find_data_block_for_off(r2f2_fs_t *fs,
     for (size_t i = start_from_indir_entry; i < NUM_FILE_INDIR_ENTRIES; i++) {
         file_indir_entry_t fie;
         read_file_indir_entry(fs, file_indir_block_idx, i, &fie);
-        if (is_entry_used(fie.f) && is_entry_committed(fie.f)) {
+        if (is_entry_used(fie.f) == ENTRY_FLAG_SET &&
+            is_entry_committed(fie.f) == ENTRY_FLAG_SET) {
             /* check the expected and subsequent indir entries */
             for (size_t j = start_from_seq_entry; j < NUM_FILE_SEQ_ENTRIES;
                  j++) {
@@ -476,7 +476,8 @@ RESULT(block_idx) find_data_block_for_off(r2f2_fs_t *fs,
                     return RESULT_ERR(block_idx, seq_block.code);
                 }
                 read_file_seq_entry(fs, seq_block.value, j, &fse);
-                if (is_entry_used(fse.f) && is_entry_committed(fse.f)) {
+                if (is_entry_used(fse.f) == ENTRY_FLAG_SET &&
+                    is_entry_committed(fse.f) == ENTRY_FLAG_SET) {
                     /* R2F2_LOG_DEBUG( */
                     /*     "looking for offset %zu, block covers range %u -
                      * %u",
@@ -526,7 +527,8 @@ RESULT(block_idx) find_data_block_for_off_direct(r2f2_fs_t *fs,
     for (size_t j = start_from_seq_entry; j < NUM_FILE_SEQ_ENTRIES; j++) {
         file_seq_entry_t fse;
         read_file_seq_entry(fs, file_seq_block_idx, j, &fse);
-        if (is_entry_used(fse.f) && is_entry_committed(fse.f)) {
+        if (is_entry_used(fse.f) == ENTRY_FLAG_SET &&
+            is_entry_committed(fse.f) == ENTRY_FLAG_SET) {
             RESULT(uint32_t) fse_off =
                 GET_FLASH_U32(fse.data_block_offset_in_file);
             CHECK_OK_PROPAGATE(fse_off, block_idx);
@@ -587,17 +589,17 @@ r2f2_ret r2f2_get_file_dir_entry(r2f2_fs_t *fs, const char *path,
             }
 
             /* no more valid entries can come after this one */
-            if (!is_entry_used(buf->f)) {
+            if (is_entry_used(buf->f) == ENTRY_FLAG_UNSET) {
                 break;
             }
-            if (!is_entry_committed(buf->f)) {
+            if (is_entry_committed(buf->f) == ENTRY_FLAG_UNSET) {
                 continue;
             }
             /*
              * the file in this entry is unlinked/removed, but it may have been
              * recreated, so keep on searching
              */
-            if (is_entry_reclaimable(buf->f)) {
+            if (is_entry_reclaimable(buf->f) == ENTRY_FLAG_SET) {
                 continue;
             }
 
@@ -641,7 +643,8 @@ void dump_file_seq_block(FILE *f, r2f2_fs_t *fs, block_idx prev_block,
     file_seq_entry_t fse;
     for (size_t i = 0; i < NUM_FILE_SEQ_ENTRIES; i++) {
         read_file_seq_entry(fs, file_seq_block, i, &fse);
-        if (is_entry_used(fse.f) && is_entry_committed(fse.f)) {
+        if (is_entry_used(fse.f) == ENTRY_FLAG_SET &&
+            is_entry_committed(fse.f) == ENTRY_FLAG_SET) {
             fprintf(f, "{fill %u | offs %u | file size %u | data block %u} | ",
                     GET_FLASH_U32(fse.data_block_fill_level).value,
                     GET_FLASH_U32(fse.data_block_offset_in_file).value,
@@ -725,8 +728,10 @@ void dump_dir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block) {
             fprintf(f,
                     "{ \\\"%s\\\" | used=%d,comm=%d,\\\nindir=%d,recl=%d | "
                     "<e%zu> %u} | ",
-                    dme.path, is_entry_used(dme.f), is_entry_committed(dme.f),
-                    is_entry_indirect(dme.f), is_entry_reclaimable(dme.f), d,
+                    dme.path, is_entry_used(dme.f) == ENTRY_FLAG_SET,
+                    is_entry_committed(dme.f) == ENTRY_FLAG_SET,
+                    is_entry_indirect(dme.f) == ENTRY_FLAG_SET,
+                    is_entry_reclaimable(dme.f) == ENTRY_FLAG_SET, d,
                     next_block.value);
         }
     }
@@ -744,7 +749,7 @@ void dump_dir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block) {
                 R2F2_LOG_ERR("no valid next block");
                 return;
             }
-            if (is_entry_indirect(dme.f)) {
+            if (is_entry_indirect(dme.f) == ENTRY_FLAG_SET) {
                 dump_file_indir_block(f, fs, dir_block, d, next_block.value);
             } else {
                 dump_file_seq_block(f, fs, dir_block, d, next_block.value, 1);

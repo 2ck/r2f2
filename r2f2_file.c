@@ -205,15 +205,16 @@ r2f2_ret r2f2_migrate_file_to_indir_block(r2f2_fs_t *fs, r2f2_fd fd) {
     file_indir_entry_t fie;
     memset(&fie, 0xFF, sizeof(file_indir_entry_t));
     SET_FLASH_BLOCK_IDX(fie.seq_block[0], f->meta.seq.last_block);
-    mark_entry_used(&fie.f);
+    fie.f = mark_entry_used(fie.f);
     r2f2_ret ie_ret =
         write_file_indir_entry(fs, indir_block_idx.value, 0, &fie);
 
     if (ie_ret != RET_OK) {
         return ie_ret;
     }
-    mark_entry_committed(&fie.f);
-    ie_ret = write_file_indir_entry_flags(fs, indir_block_idx.value, 0, &fie.f);
+    fie.f = mark_entry_committed(fie.f);
+    entry_flags_t new_f = fie.f;
+    ie_ret = write_file_indir_entry_flags(fs, indir_block_idx.value, 0, &new_f);
     if (ie_ret != RET_OK) {
         return ie_ret;
     }
@@ -243,7 +244,7 @@ r2f2_ret r2f2_migrate_file_to_indir_block(r2f2_fs_t *fs, r2f2_fd fd) {
         return RET_ERR;
     }
     SET_FLASH_BLOCK_IDX(dme.next_block[free_next_ptr], indir_block_idx.value);
-    mark_entry_indirect(&dme.f);
+    dme.f = mark_entry_indirect(dme.f);
 
     dme_ret =
         write_dir_meta_entry(fs, f->meta.dir.block, f->meta.dir.entry, &dme);
@@ -320,7 +321,7 @@ RESULT(r2f2_fd) r2f2_register_file(r2f2_fs_t *fs, const char *path) {
     memset(dme.next_block, 0xFF, sizeof(dme.next_block));
     SET_FLASH_BLOCK_IDX(dme.next_block[0], file_seq_block_idx.value);
 
-    mark_entry_used(&dme.f);
+    dme.f = mark_entry_used(dme.f);
 
     r2f2_ret ret =
         write_dir_meta_entry(fs, dir_meta_block_idx.value, dme_num.value, &dme);
@@ -328,9 +329,10 @@ RESULT(r2f2_fd) r2f2_register_file(r2f2_fs_t *fs, const char *path) {
         return RESULT_ERR(r2f2_fd, ret);
     }
 
-    mark_entry_committed(&dme.f);
+    dme.f = mark_entry_committed(dme.f);
+    entry_flags_t new_f = dme.f;
     ret = write_dir_meta_entry_flags(fs, dir_meta_block_idx.value,
-                                     dme_num.value, &dme.f);
+                                     dme_num.value, &new_f);
     if (ret != RET_OK) {
         return RESULT_ERR(r2f2_fd, ret);
     }

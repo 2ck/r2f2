@@ -39,11 +39,50 @@ struct __attribute__((packed)) r2f2_superblock {
     r2f2_fs_info_t fs_info;
 };
 
+#ifdef ECC_ON_METADATA
+
+/*
+ * 15       12 11          8 7         4 3         0
+ * +----------+-------------+-----------+-----------+
+ * | indirect | reclaimable |   used    |  commit   |
+ * +----------+-------------+-----------+-----------+
+ */
+typedef uint16_t entry_flags_t;
+#  define ENTRY_COMMIT_SHIFT 0U
+#  define ENTRY_USED_SHIFT 4U
+#  define ENTRY_RECLAIMABLE_SHIFT 8U
+#  define ENTRY_INDIRECT_SHIFT 12U
+
+#  define ENTRY_COMMIT_MASK (0xFU << ENTRY_COMMIT_SHIFT)
+#  define ENTRY_USED_MASK (0xFU << ENTRY_USED_SHIFT)
+#  define ENTRY_RECLAIMABLE_MASK (0xFU << ENTRY_RECLAIMABLE_SHIFT)
+#  define ENTRY_INDIRECT_MASK (0xFU << ENTRY_INDIRECT_SHIFT)
+
+#else
+
 typedef uint8_t entry_flags_t;
-#define ENTRY_COMMIT_MASK (1U << 0)
-#define ENTRY_USED_MASK (1U << 1)
-#define ENTRY_RECLAIMABLE_MASK (1U << 2)
-#define ENTRY_INDIRECT_MASK (1U << 3)
+#  define ENTRY_COMMIT_MASK (1U << 0)
+#  define ENTRY_USED_MASK (1U << 1)
+#  define ENTRY_RECLAIMABLE_MASK (1U << 2)
+#  define ENTRY_INDIRECT_MASK (1U << 3)
+#endif
+
+typedef enum {
+    ENTRY_FLAG_SET,
+    ENTRY_FLAG_UNSET,
+    ENTRY_FLAG_INVALID
+} entry_flag_state_t;
+
+/* flip the corresponding bit(s) to 0 (flash is 0xFF by default) */
+entry_flags_t mark_entry_committed(entry_flags_t f);
+entry_flags_t mark_entry_used(entry_flags_t f);
+entry_flags_t mark_entry_reclaimable(entry_flags_t f);
+entry_flags_t mark_entry_indirect(entry_flags_t f);
+/* check state of the corresponding bit(s) */
+entry_flag_state_t is_entry_committed(entry_flags_t f);
+entry_flag_state_t is_entry_used(entry_flags_t f);
+entry_flag_state_t is_entry_reclaimable(entry_flags_t f);
+entry_flag_state_t is_entry_indirect(entry_flags_t f);
 
 typedef struct __attribute__((packed)) dir_meta_entry {
     entry_flags_t f;
@@ -99,17 +138,6 @@ extern "C" {
  * returns the value of the last valid next_block entry
  */
 RESULT(block_idx) get_valid_next_block(r2f2_fs_t *fs, flash_block_idx *indices);
-
-/* flip the corresponding bit to 0 (flash is 0xFF by default) */
-void mark_entry_committed(entry_flags_t *f);
-void mark_entry_used(entry_flags_t *f);
-void mark_entry_reclaimable(entry_flags_t *f);
-void mark_entry_indirect(entry_flags_t *f);
-/* check if the corresponding bit is 0 */
-bool is_entry_committed(entry_flags_t f);
-bool is_entry_used(entry_flags_t f);
-bool is_entry_reclaimable(entry_flags_t f);
-bool is_entry_indirect(entry_flags_t f);
 
 r2f2_ret read_dir_meta_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
                              dir_meta_entry_t *buf);
