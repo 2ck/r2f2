@@ -81,6 +81,24 @@ r2f2_ret r2f2_mount(r2f2_fs_t *fs) {
     return RET_OK;
 }
 
+r2f2_ret r2f2_unmount(r2f2_fs_t *fs) {
+    r2f2_ret any_ret = RET_OK;
+    for (size_t i = 0; i < MAX_NUM_FDS; i++) {
+        fildes_t *fd = &fs->fds[i];
+        if (fd->active) {
+            r2f2_ret ret = r2f2_close(fs, i);
+            /*
+             * Don't return on failed attempts, try to at least close the other
+             * fds, but return the (first) error at the end.
+             */
+            if (ret != RET_OK && any_ret == RET_OK) {
+                any_ret = ret;
+            }
+        }
+    }
+    return any_ret;
+}
+
 r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
     bool creat = oflag & O_CREAT;
 
@@ -216,11 +234,13 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
 r2f2_ret r2f2_close(r2f2_fs_t *fs, r2f2_fd fd) {
     R2F2_FD_VALID_CHECK(fs, fd);
 
-    r2f2_fsync(fs, fd);
+    r2f2_ret ret = r2f2_fsync(fs, fd);
+    CHECK_OK_BASIC(ret);
 
     fs->fds[fd].active = false;
     fs->fds[fd].block_buffer.count = 0;
     R2F2_FREE(fs->fds[fd].block_buffer.data);
+    fs->fds[fd].block_buffer.data = NULL;
     return RET_OK;
 }
 

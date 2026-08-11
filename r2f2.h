@@ -41,6 +41,7 @@ extern "C" {
 
 r2f2_ret r2f2_format(r2f2_fs_t *fs);
 r2f2_ret r2f2_mount(r2f2_fs_t *fs);
+r2f2_ret r2f2_unmount(r2f2_fs_t *fs);
 
 r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag);
 r2f2_ret r2f2_close(r2f2_fs_t *fs, r2f2_fd fd);
