@@ -96,6 +96,11 @@ r2f2_ret r2f2_unmount(r2f2_fs_t *fs) {
             }
         }
     }
+
+#ifdef ECC_ON_METADATA
+    free_bch(fs->bch);
+#endif
+
     return any_ret;
 }
 
