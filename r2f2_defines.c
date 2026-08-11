@@ -17,6 +17,10 @@ RESULT(uint32_t) get_flash_u32(struct bch_control *bch, flash_u32 u) {
     } else {
         for (int i = 0; i < dec_ret; i++) {
             uint32_t loc = err_loc[i];
+			if (loc >= 8 * sizeof(u.data)) {
+				/* error in ecc, can be ignored */
+				continue;
+			}
             u.data[loc / 8] ^= (1 << (loc % 8));
         }
     }
