@@ -42,7 +42,8 @@ r2f2_ret prepare_block_allocator(r2f2_fs_t *fs) {
     size_t entry_idx = 0;
     for (block_idx b = _first_allocable_block; b < fs->cfg->geom.num_blocks;
          b++) {
-        alloc_block_entry_t entry = {.b = b};
+        alloc_block_entry_t entry;
+        SET_FLASH_BLOCK_IDX(entry.b, b);
         r2f2_ret ret = fs->cfg->flash_write(
             fs,
             _allocator_first_block * fs->cfg->geom.block_size +
@@ -116,17 +117,18 @@ RESULT(block_idx) allocate_block(r2f2_fs_t *fs) {
         return RESULT_ERR(block_idx, ret);
     }
 
-    if (entry.b < _first_allocable_block ||
-        entry.b >= fs->cfg->geom.num_blocks) {
+    RESULT(block_idx) bix = GET_FLASH_BLOCK_IDX(entry.b);
+    CHECK_OK_PROPAGATE(bix, block_idx);
+    block_idx b = bix.value;
+
+    if (b < _first_allocable_block || b >= fs->cfg->geom.num_blocks) {
         R2F2_LOG_ERR("alloc: block_entry %u at alloc pointer 0x%x  (off %u) "
                      "invalid",
-                     entry.b, _alloc_ptr,
+                     b, _alloc_ptr,
                      _alloc_ptr -
                          (_allocator_first_block * fs->cfg->geom.block_size));
         return RESULT_ERR(block_idx, RET_ERR);
     }
-
-    block_idx b = entry.b;
 
     // invalidate entry and move pointer along
     memset(&entry, 0, sizeof(alloc_block_entry_t));

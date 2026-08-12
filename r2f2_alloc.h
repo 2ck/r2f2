@@ -23,7 +23,9 @@
  */
 
 typedef struct __attribute__((packed)) alloc_block_entry {
-    block_idx b;
+    flash_block_idx b;
+    /* TODO: can we get rid of this */
+    uint8_t padding;
 } alloc_block_entry_t;
 
 #ifdef __cplusplus
