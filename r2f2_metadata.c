@@ -61,7 +61,7 @@ static entry_flag_state_t entry_flag_state(entry_flags_t f,
         return ENTRY_FLAG_INVALID;
     }
 #else
-    return ((f & mask) == 0) ? ENTRY_FLAG_SET : ENTRY_FLAG_CLEAR;
+    return ((f & mask) == 0) ? ENTRY_FLAG_SET : ENTRY_FLAG_UNSET;
 #endif
 }
 

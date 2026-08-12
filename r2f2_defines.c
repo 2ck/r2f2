@@ -1,6 +1,8 @@
 #include "r2f2_defines.h"
 #include "util/helpers.h"
 
+#ifdef ECC_ON_METADATA
+
 RESULT(uint32_t) get_flash_u32(struct bch_control *bch, flash_u32 u) {
     if (!bch) {
         return RESULT_ERR(uint32_t, RET_EINVAL);
@@ -28,3 +30,5 @@ RESULT(uint32_t) get_flash_u32(struct bch_control *bch, flash_u32 u) {
                       ((uint32_t)u.data[2] << 16) | ((uint32_t)u.data[3] << 24);
     return RESULT_OK(uint32_t, retval);
 }
+
+#endif
