@@ -82,6 +82,45 @@ r2f2_ret prepare_block_allocator(r2f2_fs_t *fs) {
     return RET_OK;
 }
 
+r2f2_ret restore_block_allocator(r2f2_fs_t *fs) {
+    /*
+     * first non-zero and non-FF entry: _alloc_ptr
+     * first all-FF entry: _next_free_ptr
+     */
+
+    _alloc_ptr = 0;
+    _next_free_ptr = 0;
+    uint32_t start_loc = _allocator_first_block * fs->cfg->geom.block_size;
+    uint32_t end_loc = (_allocator_first_block + _allocator_num_blocks) *
+                           fs->cfg->geom.block_size -
+                       sizeof(alloc_block_entry_t);
+    alloc_block_entry_t entry;
+    for (size_t loc = start_loc; loc <= end_loc;
+         loc += sizeof(alloc_block_entry_t)) {
+        r2f2_ret ret =
+            fs->cfg->flash_read(fs, loc, sizeof(alloc_block_entry_t), &entry);
+        CHECK_OK_BASIC(ret);
+        RESULT(block_idx) b = GET_FLASH_BLOCK_IDX(entry.b);
+        CHECK_OK_RETURN(b);
+        if (b.value > 0 && b.value < fs->cfg->geom.num_blocks) {
+            if (_alloc_ptr == 0) {
+                _alloc_ptr = loc;
+            }
+        }
+        if (b.value == UINT32_MAX) {
+            if (_next_free_ptr == 0) {
+                _next_free_ptr = loc;
+            }
+        }
+    }
+    if (_alloc_ptr == 0 || _next_free_ptr == 0) {
+        return RET_ERR;
+    }
+    R2F2_LOG_DEBUG("restored _alloc_ptr %u, _next_free_ptr %u", _alloc_ptr,
+                   _next_free_ptr);
+    return RET_OK;
+}
+
 static inline void advance_ptr(r2f2_fs_t *fs, uint32_t *_ptr) {
     uint32_t ptr = *_ptr;
     ptr += sizeof(alloc_block_entry_t);

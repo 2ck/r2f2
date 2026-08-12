@@ -71,6 +71,8 @@ r2f2_ret r2f2_mount(r2f2_fs_t *fs) {
         RESULT(block_idx) b = GET_FLASH_BLOCK_IDX(fs_info.root_dir_block);
         CHECK_OK_RETURN(b);
         fs->root_dir_block = b.value;
+        r2f2_ret ret = restore_block_allocator(fs);
+        CHECK_OK_BASIC(ret);
     }
 
     /* we are mounted */

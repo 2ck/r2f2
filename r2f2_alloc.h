@@ -34,6 +34,8 @@ extern "C" {
 
 r2f2_ret prepare_block_allocator(r2f2_fs_t *fs);
 
+r2f2_ret restore_block_allocator(r2f2_fs_t *fs);
+
 RESULT(block_idx) allocate_block(r2f2_fs_t *fs);
 
 r2f2_ret free_block(r2f2_fs_t *fs, block_idx b);
