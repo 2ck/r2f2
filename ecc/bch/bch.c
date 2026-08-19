@@ -77,7 +77,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define DIV_ROUND_UP(n, d) (((n) + (d) - 1) / (d))
+#define DIV_ROUND_UP(n, d) (((n) + (d)-1) / (d))
 #define cpu_to_be32 __builtin_bswap32
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
@@ -287,8 +287,14 @@ static inline int mod_s(struct bch_control *bch, unsigned int v) {
 }
 
 static inline int deg(unsigned int poly) {
-    /* polynomial degree is the most-significant bit index */
-    return fls(poly) - 1;
+    int degree = -1;
+
+    while (poly != 0) {
+        ++degree;
+        poly >>= 1;
+    }
+
+    return degree;
 }
 
 static inline int parity(unsigned int x) {
