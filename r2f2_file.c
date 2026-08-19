@@ -372,12 +372,12 @@ RESULT(r2f2_fd) r2f2_create_fd(r2f2_fs_t *fs, const char *path) {
             continue;
         }
         fs->fds[i].active = true;
-        size_t len = strnlen(path, MAX_PATH_LEN);
-        if (len == MAX_PATH_LEN) {
+        size_t len = strlen(path);
+        if (len >= MAX_PATH_LEN) {
             return RESULT_ERR(r2f2_fd, RET_EINVAL);
         }
-        /* strnlen excludes '\0' terminator */
-        memcpy(fs->fds[i].path, path, len + 1);
+        memset(fs->fds[i].path, 0, MAX_PATH_LEN);
+        memcpy(fs->fds[i].path, path, len);
 
         void *mem = R2F2_MALLOC(fs->cfg->geom.block_size);
         R2F2_ASSERT(mem, !=, NULL, "%p");
