@@ -100,16 +100,37 @@ r2f2_ret restore_block_allocator(r2f2_fs_t *fs) {
         r2f2_ret ret =
             fs->cfg->flash_read(fs, loc, sizeof(alloc_block_entry_t), &entry);
         CHECK_OK_BASIC(ret);
-        RESULT(block_idx) b = GET_FLASH_BLOCK_IDX(entry.b);
-        CHECK_OK_RETURN(b);
-        if (b.value > 0 && b.value < fs->cfg->geom.num_blocks) {
-            if (_alloc_ptr == 0) {
-                _alloc_ptr = loc;
-            }
-        }
-        if (b.value == UINT32_MAX) {
+
+        /* trivial, even with ECC */
+        if (is_all_one(&entry, sizeof(alloc_block_entry_t))) {
+            /* entry is all FF, so the block index is too */
             if (_next_free_ptr == 0) {
                 _next_free_ptr = loc;
+            }
+        } else if (!is_all_zero(&entry, sizeof(alloc_block_entry_t))) {
+            /* entry is neither 0 nor FF */
+            RESULT(block_idx) b = GET_FLASH_BLOCK_IDX(entry.b);
+            CHECK_OK_RETURN(b);
+            if (b.value > 0 && b.value < fs->cfg->geom.num_blocks) {
+                if (_alloc_ptr == 0) {
+                    _alloc_ptr = loc;
+                }
+            } else if (b.value == UINT32_MAX) {
+                /* entry was FF after correction */
+                if (_next_free_ptr == 0) {
+                    _next_free_ptr = loc;
+                }
+            }
+        } else {
+            /*
+             * Only possible with bit flips that lead to a value !=0 && !=FF,
+             * but which after correction is == 0. Any other case means
+             * something went wrong.
+             */
+            RESULT(block_idx) b = GET_FLASH_BLOCK_IDX(entry.b);
+            CHECK_OK_RETURN(b);
+            if (b.value != 0) {
+                return RET_ERR;
             }
         }
     }
