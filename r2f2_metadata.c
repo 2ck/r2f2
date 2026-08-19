@@ -584,9 +584,9 @@ RESULT(block_idx) find_data_block_for_off_direct(r2f2_fs_t *fs,
     return RESULT_ERR(block_idx, RET_NOT_FOUND);
 }
 
-r2f2_ret r2f2_get_file_dir_entry(r2f2_fs_t *fs, const char *path,
-                                 dir_meta_entry_t *buf,
-                                 struct dir_traversal_ret *ret) {
+r2f2_ret r2f2_get_dir_entry(r2f2_fs_t *fs, const char *path,
+                            dir_meta_entry_t *buf,
+                            struct dir_traversal_ret *ret) {
     RESULT(block_idx) dmb_ret = r2f2_find_dir_meta_block(fs, path);
     if (dmb_ret.code != RET_OK) {
         R2F2_LOG_ERR("traversal to dir_meta_block failed (%d) for path '%s'",
@@ -631,8 +631,8 @@ r2f2_ret r2f2_get_file_dir_entry(r2f2_fs_t *fs, const char *path,
                 continue;
             }
             /*
-             * the file in this entry is unlinked/removed, but it may have been
-             * recreated, so keep on searching
+             * the file/dir in this entry is unlinked/removed, but it may have
+             * been recreated, so keep on searching
              */
             if (is_entry_reclaimable(flags) == ENTRY_FLAG_SET) {
                 continue;
@@ -644,7 +644,7 @@ r2f2_ret r2f2_get_file_dir_entry(r2f2_fs_t *fs, const char *path,
                 return read_ret;
             }
 
-            if (memcmp(buf->path, file_basename, MAX_PATH_LEN) == 0) {
+            if (memcmp(buf->path, basename, MAX_PATH_LEN) == 0) {
                 ret->dme_idx = i;
                 ret->dme_flags = flags;
                 ret->dmb_idx = dmb;

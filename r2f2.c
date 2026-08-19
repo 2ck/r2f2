@@ -115,7 +115,7 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
 
     dir_meta_entry_t dme;
     struct dir_traversal_ret dir_ret;
-    r2f2_ret ret = r2f2_get_file_dir_entry(fs, path, &dme, &dir_ret);
+    r2f2_ret ret = r2f2_get_dir_entry(fs, path, &dme, &dir_ret);
 
     if (ret == RET_OK) {
         /* file exists already */
@@ -531,7 +531,7 @@ r2f2_ret r2f2_remove(r2f2_fs_t *fs, const char *path) {
 
     dir_meta_entry_t dme;
     struct dir_traversal_ret dir_ret;
-    r2f2_ret ret = r2f2_get_file_dir_entry(fs, path, &dme, &dir_ret);
+    r2f2_ret ret = r2f2_get_dir_entry(fs, path, &dme, &dir_ret);
     if (ret != RET_OK) {
         return ret;
     }

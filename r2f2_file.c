@@ -93,7 +93,7 @@ RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path) {
              * abort as soon as we find our first unused entry (no more valid
              * ones can come after)
              */
-            if (!is_entry_used(flags)) {
+            if (is_entry_used(flags) == ENTRY_FLAG_UNSET) {
                 break;
             }
 

@@ -193,9 +193,9 @@ struct dir_traversal_ret {
     entry_flags_t dme_flags;
 };
 
-r2f2_ret r2f2_get_file_dir_entry(r2f2_fs_t *fs, const char *path,
-                                 dir_meta_entry_t *buf,
-                                 struct dir_traversal_ret *ret);
+r2f2_ret r2f2_get_dir_entry(r2f2_fs_t *fs, const char *path,
+                            dir_meta_entry_t *buf,
+                            struct dir_traversal_ret *ret);
 
 void dump_fs_dot(r2f2_fs_t *fs, const char *filename);
 #ifdef __cplusplus
