@@ -251,6 +251,82 @@ r2f2_ret r2f2_close(r2f2_fs_t *fs, r2f2_fd fd) {
     return RET_OK;
 }
 
+r2f2_ret r2f2_mkdir(r2f2_fs_t *fs, const char *path) {
+    if (!path) {
+        return RET_ERR;
+    }
+
+    size_t path_len = strlen(path);
+    if (path_len >= MAX_PATH_LEN) {
+        R2F2_LOG_ERR("path '%s' too long", path);
+        return RET_ERR;
+    }
+
+    /* trim trailing slash(es) in path */
+    char path_copy[MAX_PATH_LEN];
+    memset(path_copy, 0, MAX_PATH_LEN);
+    memcpy(path_copy, path, path_len);
+    char *end = path_copy + path_len;
+
+    while (end > path_copy && end[-1] == '/') {
+        *--end = '\0';
+    }
+
+    dir_meta_entry_t dme;
+    struct dir_traversal_ret dir_ret;
+    r2f2_ret ret = r2f2_get_dir_entry(fs, path_copy, &dme, &dir_ret);
+
+    if (ret == RET_NOT_FOUND) {
+        RESULT(block_idx) dir_meta_block_idx =
+            r2f2_find_last_dir_meta_block(fs, path_copy);
+        CHECK_OK_RETURN(dir_meta_block_idx);
+
+        RESULT(uint32_t) dme_num =
+            get_free_dir_meta_entry(fs, dir_meta_block_idx.value);
+        if (dme_num.code == RET_NOMEM) {
+            RESULT(block_idx) new_dir_meta_block =
+                r2f2_create_next_dir_meta_block(fs, dir_meta_block_idx.value);
+            CHECK_OK_RETURN(new_dir_meta_block);
+            dir_meta_block_idx = new_dir_meta_block;
+            dme_num.value = 0;
+        } else if (dme_num.code != RET_OK) {
+            return dme_num.code;
+        }
+
+        dir_meta_entry_t dme;
+        memset(&dme, 0xFF, sizeof(dir_meta_entry_t));
+
+        r2f2_ret ret = set_path_to_basename_zeroed(dme.path, path_copy);
+        CHECK_OK_BASIC(ret);
+
+        memset(dme.next_block, 0xFF, sizeof(dme.next_block));
+        RESULT(block_idx) next_block = allocate_block(fs);
+        CHECK_OK_RETURN(next_block);
+        SET_FLASH_BLOCK_IDX(dme.next_block[0], next_block.value);
+
+        entry_flags_t flags;
+        memset(&flags, 0xFF, sizeof(entry_flags_t));
+        flags = mark_entry_used(flags);
+        ret = write_dir_meta_entry_flags(fs, dir_meta_block_idx.value,
+                                         dme_num.value, &flags);
+        CHECK_OK_BASIC(ret);
+
+        ret = write_dir_meta_entry(fs, dir_meta_block_idx.value, dme_num.value,
+                                   &dme);
+        CHECK_OK_BASIC(ret);
+
+        flags = mark_entry_committed(flags);
+        ret = write_dir_meta_entry_flags(fs, dir_meta_block_idx.value,
+                                         dme_num.value, &flags);
+        CHECK_OK_BASIC(ret);
+        return RET_OK;
+    } else if (ret == RET_OK) {
+        return RET_EXIST;
+    }
+
+    return RET_ERR;
+}
+
 off_t r2f2_lseek(r2f2_fs_t *fs, r2f2_fd fd, off_t offset, int whence) {
     R2F2_FD_VALID_CHECK(fs, fd);
 

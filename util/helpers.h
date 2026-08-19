@@ -1,5 +1,6 @@
 #pragma once
 
+#include "r2f2_defines.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -32,6 +33,8 @@ bool is_all_zero(const void *buf, size_t size);
 bool is_all_one(const void *buf, size_t size);
 
 void r2f2_hexdump(const uint8_t *buf, size_t len);
+
+r2f2_ret set_path_to_basename_zeroed(char *dst, const char *src);
 
 #ifdef __cplusplus
 }

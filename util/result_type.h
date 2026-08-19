@@ -11,7 +11,9 @@ typedef enum {
     RET_OOB = -5,
     RET_DIR_NOT_FOUND = -6,
     RET_FILE_NOT_FOUND = -7,
-    RET_ECC_ERR = -8,
+    RET_EXIST = -8,
+
+    RET_ECC_ERR = -100,
 } ret_code_t;
 
 #define RESULT(name) result_##name##_t

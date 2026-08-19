@@ -60,3 +60,20 @@ void r2f2_hexdump(const uint8_t *buf, size_t len) {
         }
     }
 }
+
+r2f2_ret set_path_to_basename_zeroed(char *restrict dst,
+                                     const char *restrict src) {
+    const char *b = get_basename(src);
+    if (!b) {
+        R2F2_LOG_ERR("could not get basename for path '%s'", src);
+        return RET_ERR;
+    }
+    size_t len = strlen(b);
+    if (len >= MAX_PATH_LEN) {
+        R2F2_LOG_ERR("basename for path '%s' too long", src);
+        return RET_ERR;
+    }
+    memset(dst, 0, MAX_PATH_LEN);
+    memcpy(dst, b, len);
+    return RET_OK;
+}

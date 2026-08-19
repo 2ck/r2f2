@@ -45,6 +45,7 @@ r2f2_ret r2f2_unmount(r2f2_fs_t *fs);
 
 r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag);
 r2f2_ret r2f2_close(r2f2_fs_t *fs, r2f2_fd fd);
+r2f2_ret r2f2_mkdir(r2f2_fs_t *fs, const char *path);
 off_t r2f2_lseek(r2f2_fs_t *fs, r2f2_fd fd, off_t offset, int whence);
 ssize_t r2f2_read(r2f2_fs_t *fs, r2f2_fd fd, void *buf, size_t count);
 ssize_t r2f2_write(r2f2_fs_t *fs, r2f2_fd fd, const void *buf, size_t count);

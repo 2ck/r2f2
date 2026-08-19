@@ -594,18 +594,9 @@ r2f2_ret r2f2_get_dir_entry(r2f2_fs_t *fs, const char *path,
         return dmb_ret.code;
     }
 
-    char file_basename[MAX_PATH_LEN];
-    memset(file_basename, 0, MAX_PATH_LEN);
-    const char *b = get_basename(path);
-    if (!b) {
-        R2F2_LOG_ERR("could not get basename for path '%s'", path);
-        return RET_ERR;
-    }
-    /*
-     * make sure to also copy '\0' terminator, important in case we don't have a
-     * zeroed buffer at some point
-     */
-    memcpy(file_basename, b, strlen(b) + 1);
+    char basename[MAX_PATH_LEN];
+    r2f2_ret path_ret = set_path_to_basename_zeroed(basename, path);
+    CHECK_OK_BASIC(path_ret);
 
     /*
      * optionally iterate through the next block pointers until we find one with

@@ -315,17 +315,10 @@ RESULT(r2f2_fd) r2f2_register_file(r2f2_fs_t *fs, const char *path) {
     dir_meta_entry_t dme;
     memset(&dme, 0xFF, sizeof(dir_meta_entry_t));
 
-    memset(dme.path, 0, MAX_PATH_LEN);
-    const char *b = get_basename(path);
-    if (!b) {
-        R2F2_LOG_ERR("could not get basename for path '%s'", path);
-        return RESULT_ERR(r2f2_fd, RET_ERR);
+    r2f2_ret ret = set_path_to_basename_zeroed(dme.path, path);
+    if (ret != RET_OK) {
+        return RESULT_ERR(r2f2_fd, ret);
     }
-    /*
-     * make sure to also copy '\0' terminator, important in case we don't have a
-     * zeroed buffer at some point
-     */
-    memcpy(dme.path, b, strlen(b) + 1);
 
     memset(dme.next_block, 0xFF, sizeof(dme.next_block));
     SET_FLASH_BLOCK_IDX(dme.next_block[0], file_seq_block_idx.value);
@@ -333,8 +326,8 @@ RESULT(r2f2_fd) r2f2_register_file(r2f2_fs_t *fs, const char *path) {
     entry_flags_t flags;
     memset(&flags, 0xFF, sizeof(entry_flags_t));
     flags = mark_entry_used(flags);
-    r2f2_ret ret = write_dir_meta_entry_flags(fs, dir_meta_block_idx.value,
-                                              dme_num.value, &flags);
+    ret = write_dir_meta_entry_flags(fs, dir_meta_block_idx.value,
+                                     dme_num.value, &flags);
     if (ret != RET_OK) {
         return RESULT_ERR(r2f2_fd, ret);
     }
