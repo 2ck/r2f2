@@ -206,10 +206,10 @@ r2f2_ret r2f2_migrate_file_to_indir_block(r2f2_fs_t *fs, r2f2_fd fd) {
     fildes_t *f = &fs->fds[fd];
 
     RESULT(block_idx) indir_block_idx = allocate_block(fs);
-    CHECK_OK_RETURN(indir_block_idx);
+    RETURN_ON_ERR(indir_block_idx.code);
     r2f2_ret ret =
         write_block_header(fs, indir_block_idx.value, BLOCK_TYPE_INDIR);
-    CHECK_OK_BASIC(ret);
+    RETURN_ON_ERR(ret);
 
     /* create initial indir_entry in our new indir_block */
 
@@ -218,29 +218,29 @@ r2f2_ret r2f2_migrate_file_to_indir_block(r2f2_fs_t *fs, r2f2_fd fd) {
     fie_flags = mark_entry_used(fie_flags);
     ret =
         write_file_indir_entry_flags(fs, indir_block_idx.value, 0, &fie_flags);
-    CHECK_OK_BASIC(ret);
+    RETURN_ON_ERR(ret);
 
     file_indir_entry_t fie;
     memset(&fie, 0xFF, sizeof(file_indir_entry_t));
     SET_FLASH_BLOCK_IDX(fie.seq_block[0], f->meta.seq.last_block);
     ret = write_file_indir_entry(fs, indir_block_idx.value, 0, &fie);
-    CHECK_OK_BASIC(ret);
+    RETURN_ON_ERR(ret);
 
     fie_flags = mark_entry_committed(fie_flags);
     ret =
         write_file_indir_entry_flags(fs, indir_block_idx.value, 0, &fie_flags);
-    CHECK_OK_BASIC(ret);
+    RETURN_ON_ERR(ret);
 
     /* update our dir_meta_entry */
 
     dir_meta_entry_t dme;
     ret = read_dir_meta_entry(fs, f->meta.dir.block, f->meta.dir.entry, &dme);
-    CHECK_OK_BASIC(ret);
+    RETURN_ON_ERR(ret);
 
     uint32_t free_next_ptr = NUM_NEXT_PTRS;
     for (size_t i = 0; i < NUM_NEXT_PTRS; i++) {
         RESULT(block_idx) n = GET_FLASH_BLOCK_IDX(dme.next_block[i]);
-        CHECK_OK_RETURN(n);
+        RETURN_ON_ERR(n.code);
         if (n.value >= fs->cfg->geom.num_blocks) {
             free_next_ptr = i;
             break;
@@ -258,10 +258,10 @@ r2f2_ret r2f2_migrate_file_to_indir_block(r2f2_fs_t *fs, r2f2_fd fd) {
     memset(&dme_flags, 0xFF, sizeof(entry_flags_t));
     ret = read_dir_meta_entry_flags(fs, f->meta.dir.block, f->meta.dir.entry,
                                     &dme_flags);
-    CHECK_OK_BASIC(ret);
+    RETURN_ON_ERR(ret);
 
     ret = write_dir_meta_entry(fs, f->meta.dir.block, f->meta.dir.entry, &dme);
-    CHECK_OK_BASIC(ret);
+    RETURN_ON_ERR(ret);
 
     f->meta.indir.block = indir_block_idx.value;
 

@@ -145,7 +145,7 @@ uint32_t r2f2_reclaim_file_blocks(r2f2_fs_t *fs, dir_meta_entry_t *dme) {
          * indir_block starting from the next entry
          */
         RESULT(uint32_t) block_type = get_block_type(fs, next_block.value);
-        CHECK_OK_RETURN(block_type);
+        RETURN_ON_ERR(block_type.code);
         if (block_type.value == BLOCK_TYPE_INDIR) {
             freed += r2f2_reclaim_indir_block(fs, next_block.value);
         } else if (block_type.value == BLOCK_TYPE_SEQ) {
@@ -257,7 +257,7 @@ r2f2_ret r2f2_migrate_root_dir_block(r2f2_fs_t *fs) {
                 return b.code;
             }
             r2f2_ret ret = write_block_header(fs, b.value, BLOCK_TYPE_DIR);
-            CHECK_OK_BASIC(ret);
+            RETURN_ON_ERR(ret);
             alloced = true;
         }
 
@@ -307,7 +307,7 @@ r2f2_ret r2f2_migrate_root_dir_block(r2f2_fs_t *fs) {
                 return b.code;
             }
             r2f2_ret ret = write_block_header(fs, b.value, BLOCK_TYPE_DIR);
-            CHECK_OK_BASIC(ret);
+            RETURN_ON_ERR(ret);
             fs->root_dir_block = b.value;
         }
     }
@@ -322,7 +322,7 @@ r2f2_ret r2f2_migrate_dir_block_in_entry(r2f2_fs_t *fs, block_idx dir_block,
                                          uint32_t parent_entry) {
     dir_meta_entry_t dme;
     r2f2_ret ret = read_dir_meta_entry(fs, parent_block, parent_entry, &dme);
-    CHECK_OK_BASIC(ret);
+    RETURN_ON_ERR(ret);
 
     /*
      * All entries in our dir_block are used up. Likely, our dir_block has a
@@ -335,14 +335,14 @@ r2f2_ret r2f2_migrate_dir_block_in_entry(r2f2_fs_t *fs, block_idx dir_block,
                               dir_block * fs->cfg->geom.block_size +
                                   offsetof(dir_meta_block_t, next),
                               sizeof(next), next);
-    CHECK_OK_BASIC(ret);
+    RETURN_ON_ERR(ret);
     RESULT(block_idx) dir_next = get_valid_next_block(fs, next);
     if (dir_next.code == RET_NOT_FOUND) {
         /* recovered dir_block had no next_ptr. TODO */
         R2F2_LOG_WARN("unhandled (TODO): migrating dir_block without next_ptr");
         return dir_next.code;
     } else {
-        CHECK_OK_RETURN(dir_next);
+        RETURN_ON_ERR(dir_next.code);
     }
 
     /* write next_ptr into the parent dir_entry, if there is space */
@@ -354,7 +354,7 @@ r2f2_ret r2f2_migrate_dir_block_in_entry(r2f2_fs_t *fs, block_idx dir_block,
                       "entry in parent");
         return free_next_ptr.code;
     } else {
-        CHECK_OK_RETURN(free_next_ptr);
+        RETURN_ON_ERR(free_next_ptr.code);
     }
     SET_FLASH_BLOCK_IDX(dme.next_block[free_next_ptr.value], dir_next.value);
     ret = write_dir_meta_entry(fs, parent_block, parent_entry, &dme);

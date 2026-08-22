@@ -49,7 +49,7 @@ RESULT(uint32_t) get_unused_next_ptr_idx(r2f2_fs_t *fs,
 
     for (size_t i = 0; i < NUM_NEXT_PTRS; i++) {
         RESULT(block_idx) b = GET_FLASH_BLOCK_IDX(indices[i]);
-        CHECK_OK_PROPAGATE(b, uint32_t);
+        RETURN_ON_ERR_AS(uint32_t, b);
         /* this entry was unused, so no more valid entry can come */
         if (b.value >= fs->cfg->geom.num_blocks) {
             return RESULT_OK(uint32_t, i);
@@ -68,7 +68,7 @@ RESULT(block_idx) get_valid_next_block(r2f2_fs_t *fs,
 
     for (size_t i = 0; i < NUM_NEXT_PTRS; i++) {
         RESULT(block_idx) b = GET_FLASH_BLOCK_IDX(indices[i]);
-        CHECK_OK_PROPAGATE(b, block_idx);
+        RETURN_ON_ERR_AS(block_idx, b);
         /* this entry was unused, so no more valid entry can come */
         if (b.value >= fs->cfg->geom.num_blocks) {
             break;
@@ -556,10 +556,10 @@ RESULT(block_idx) find_data_block_for_off(r2f2_fs_t *fs,
                     /*         fse.data_block_fill_level); */
                     RESULT(uint32_t) fse_off =
                         GET_FLASH_U32(fse.data_block_offset_in_file);
-                    CHECK_OK_PROPAGATE(fse_off, block_idx);
+                    RETURN_ON_ERR_AS(block_idx, fse_off);
                     RESULT(uint32_t) fse_fill =
                         GET_FLASH_U32(fse.data_block_fill_level);
-                    CHECK_OK_PROPAGATE(fse_fill, block_idx);
+                    RETURN_ON_ERR_AS(block_idx, fse_fill);
                     if (fse_off.value == off ||
                         (fse_off.value <= off &&
                          fse_off.value + fse_fill.value >= off)) {
@@ -610,10 +610,10 @@ RESULT(block_idx) find_data_block_for_off_direct(r2f2_fs_t *fs,
             }
             RESULT(uint32_t) fse_off =
                 GET_FLASH_U32(fse.data_block_offset_in_file);
-            CHECK_OK_PROPAGATE(fse_off, block_idx);
+            RETURN_ON_ERR_AS(block_idx, fse_off);
             RESULT(uint32_t) fse_fill =
                 GET_FLASH_U32(fse.data_block_fill_level);
-            CHECK_OK_PROPAGATE(fse_fill, block_idx);
+            RETURN_ON_ERR_AS(block_idx, fse_fill);
             if (fse_off.value == off ||
                 (fse_off.value <= off &&
                  fse_off.value + fse_fill.value >= off)) {
@@ -642,7 +642,7 @@ r2f2_ret r2f2_get_dir_entry(r2f2_fs_t *fs, const char *path,
 
     char basename[MAX_PATH_LEN];
     r2f2_ret path_ret = set_path_to_basename_zeroed(basename, path);
-    CHECK_OK_BASIC(path_ret);
+    RETURN_ON_ERR(path_ret);
 
     /*
      * optionally iterate through the next block pointers until we find one with

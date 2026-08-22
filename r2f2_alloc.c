@@ -99,7 +99,7 @@ r2f2_ret restore_block_allocator(r2f2_fs_t *fs) {
          loc += sizeof(alloc_block_entry_t)) {
         r2f2_ret ret =
             fs->cfg->flash_read(fs, loc, sizeof(alloc_block_entry_t), &entry);
-        CHECK_OK_BASIC(ret);
+        RETURN_ON_ERR(ret);
 
         /* trivial, even with ECC */
         if (is_all_one(&entry, sizeof(alloc_block_entry_t))) {
@@ -110,7 +110,7 @@ r2f2_ret restore_block_allocator(r2f2_fs_t *fs) {
         } else if (!is_all_zero(&entry, sizeof(alloc_block_entry_t))) {
             /* entry is neither 0 nor FF */
             RESULT(block_idx) b = GET_FLASH_BLOCK_IDX(entry.b);
-            CHECK_OK_RETURN(b);
+            RETURN_ON_ERR(b.code);
             if (b.value > 0 && b.value < fs->cfg->geom.num_blocks) {
                 if (_alloc_ptr == 0) {
                     _alloc_ptr = loc;
@@ -128,7 +128,7 @@ r2f2_ret restore_block_allocator(r2f2_fs_t *fs) {
              * something went wrong.
              */
             RESULT(block_idx) b = GET_FLASH_BLOCK_IDX(entry.b);
-            CHECK_OK_RETURN(b);
+            RETURN_ON_ERR(b.code);
             if (b.value != 0) {
                 return RET_ERR;
             }
@@ -181,7 +181,7 @@ RESULT(block_idx) allocate_block(r2f2_fs_t *fs) {
     }
 
     RESULT(block_idx) bix = GET_FLASH_BLOCK_IDX(entry.b);
-    CHECK_OK_PROPAGATE(bix, block_idx);
+    RETURN_ON_ERR_AS(block_idx, bix);
     block_idx b = bix.value;
 
     if (b < _first_allocable_block || b >= fs->cfg->geom.num_blocks) {

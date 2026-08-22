@@ -30,15 +30,7 @@ typedef enum {
 
 #define RESULT_ERR(name, e) ((RESULT(name)){.code = (e)})
 
-#define CHECK_OK_RETURN(res)                                                   \
-    do {                                                                       \
-        ret_code_t _code = (res).code;                                         \
-        if (_code != RET_OK) {                                                 \
-            return _code;                                                      \
-        }                                                                      \
-    } while (0)
-
-#define CHECK_OK_PROPAGATE(res, type)                                          \
+#define RETURN_ON_ERR_AS(type, res)                                            \
     do {                                                                       \
         ret_code_t _code = (res).code;                                         \
         if (_code != RET_OK) {                                                 \
@@ -46,7 +38,7 @@ typedef enum {
         }                                                                      \
     } while (0)
 
-#define CHECK_OK_BASIC(code)                                                   \
+#define RETURN_ON_ERR(code)                                                    \
     do {                                                                       \
         ret_code_t _code = (code);                                             \
         if (_code != RET_OK) {                                                 \

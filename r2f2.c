@@ -20,7 +20,7 @@ r2f2_ret r2f2_format(r2f2_fs_t *fs) {
     }
 
     r2f2_ret ret = write_block_header(fs, b.value, BLOCK_TYPE_DIR);
-    CHECK_OK_BASIC(ret);
+    RETURN_ON_ERR(ret);
     /* TODO: remove this and just search for it in block 1/2 or something */
     /* alternatively, make this have several next_block-pointers */
 
@@ -72,10 +72,10 @@ r2f2_ret r2f2_mount(r2f2_fs_t *fs) {
         r2f2_format(fs);
     } else {
         RESULT(block_idx) b = GET_FLASH_BLOCK_IDX(fs_info.root_dir_block);
-        CHECK_OK_RETURN(b);
+        RETURN_ON_ERR(b.code);
         fs->root_dir_block = b.value;
         r2f2_ret ret = restore_block_allocator(fs);
-        CHECK_OK_BASIC(ret);
+        RETURN_ON_ERR(ret);
     }
 
     /* we are mounted */
@@ -137,7 +137,7 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
          * via a file_indir_block, and the next block's header tells us.
          */
         RESULT(uint32_t) block_type = get_block_type(fs, next_block.value);
-        CHECK_OK_RETURN(block_type);
+        RETURN_ON_ERR(block_type.code);
         if (block_type.value == BLOCK_TYPE_INDIR) {
             indir_block_idx = next_block.value;
             RESULT(uint32_t) last_fie =
@@ -212,7 +212,7 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
         fildes_t *f = &fs->fds[fd.value];
         f->file_offset = 0;
         RESULT(uint32_t) file_size = GET_FLASH_U32(fse.current_file_size);
-        CHECK_OK_RETURN(file_size);
+        RETURN_ON_ERR(file_size.code);
         f->file_size = file_size.value;
 
         f->meta.dir.block = dir_ret.dmb_idx;
@@ -221,10 +221,10 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
         f->meta.seq.last_block = seq_block_idx;
         f->meta.seq.next_entry = last_fse.value + 1;
         RESULT(block_idx) last_data_block = GET_FLASH_BLOCK_IDX(fse.data_block);
-        CHECK_OK_RETURN(last_data_block);
+        RETURN_ON_ERR(last_data_block.code);
         f->meta.data.last_block = last_data_block.value;
         RESULT(uint32_t) last_fill = GET_FLASH_U32(fse.data_block_fill_level);
-        CHECK_OK_RETURN(last_fill);
+        RETURN_ON_ERR(last_fill.code);
         f->meta.data.last_block_fill = last_fill.value;
 
         return fd.value;
@@ -247,7 +247,7 @@ r2f2_ret r2f2_close(r2f2_fs_t *fs, r2f2_fd fd) {
     R2F2_FD_VALID_CHECK(fs, fd);
 
     r2f2_ret ret = r2f2_fsync(fs, fd);
-    CHECK_OK_BASIC(ret);
+    RETURN_ON_ERR(ret);
 
     fs->fds[fd].active = false;
     fs->fds[fd].block_buffer.count = 0;
@@ -284,14 +284,14 @@ r2f2_ret r2f2_mkdir(r2f2_fs_t *fs, const char *path) {
     if (ret == RET_NOT_FOUND) {
         RESULT(block_idx) dir_meta_block_idx =
             r2f2_find_last_dir_meta_block(fs, path_copy);
-        CHECK_OK_RETURN(dir_meta_block_idx);
+        RETURN_ON_ERR(dir_meta_block_idx.code);
 
         RESULT(uint32_t) dme_num =
             get_free_dir_meta_entry(fs, dir_meta_block_idx.value);
         if (dme_num.code == RET_NOMEM) {
             RESULT(block_idx) new_dir_meta_block =
                 r2f2_create_next_dir_meta_block(fs, dir_meta_block_idx.value);
-            CHECK_OK_RETURN(new_dir_meta_block);
+            RETURN_ON_ERR(new_dir_meta_block.code);
             dir_meta_block_idx = new_dir_meta_block;
             dme_num.value = 0;
         } else if (dme_num.code != RET_OK) {
@@ -302,13 +302,13 @@ r2f2_ret r2f2_mkdir(r2f2_fs_t *fs, const char *path) {
         memset(&dme, 0xFF, sizeof(dir_meta_entry_t));
 
         r2f2_ret ret = set_path_to_basename_zeroed(dme.path, path_copy);
-        CHECK_OK_BASIC(ret);
+        RETURN_ON_ERR(ret);
 
         memset(dme.next_block, 0xFF, sizeof(dme.next_block));
         RESULT(block_idx) next_block = allocate_block(fs);
-        CHECK_OK_RETURN(next_block);
+        RETURN_ON_ERR(next_block.code);
         ret = write_block_header(fs, next_block.value, BLOCK_TYPE_DIR);
-        CHECK_OK_BASIC(ret);
+        RETURN_ON_ERR(ret);
         SET_FLASH_BLOCK_IDX(dme.next_block[0], next_block.value);
 
         entry_flags_t flags;
@@ -316,16 +316,16 @@ r2f2_ret r2f2_mkdir(r2f2_fs_t *fs, const char *path) {
         flags = mark_entry_used(flags);
         ret = write_dir_meta_entry_flags(fs, dir_meta_block_idx.value,
                                          dme_num.value, &flags);
-        CHECK_OK_BASIC(ret);
+        RETURN_ON_ERR(ret);
 
         ret = write_dir_meta_entry(fs, dir_meta_block_idx.value, dme_num.value,
                                    &dme);
-        CHECK_OK_BASIC(ret);
+        RETURN_ON_ERR(ret);
 
         flags = mark_entry_committed(flags);
         ret = write_dir_meta_entry_flags(fs, dir_meta_block_idx.value,
                                          dme_num.value, &flags);
-        CHECK_OK_BASIC(ret);
+        RETURN_ON_ERR(ret);
         return RET_OK;
     } else if (ret == RET_OK) {
         return RET_EXIST;
@@ -541,7 +541,7 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
                 return seq_block_idx.code;
             }
             ret = write_block_header(fs, seq_block_idx.value, BLOCK_TYPE_SEQ);
-            CHECK_OK_BASIC(ret);
+            RETURN_ON_ERR(ret);
 
             RESULT(uint32_t) new_indir_entry_num =
                 get_free_file_indir_entry(fs, f->meta.indir.block);
@@ -553,23 +553,23 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
             memset(&fie_flags, 0xFF, sizeof(entry_flags_t));
             ret = read_file_indir_entry_flags(
                 fs, f->meta.indir.block, new_indir_entry_num.value, &fie_flags);
-            CHECK_OK_BASIC(ret);
+            RETURN_ON_ERR(ret);
             fie_flags = mark_entry_used(fie_flags);
             ret = write_file_indir_entry_flags(
                 fs, f->meta.indir.block, new_indir_entry_num.value, &fie_flags);
-            CHECK_OK_BASIC(ret);
+            RETURN_ON_ERR(ret);
 
             file_indir_entry_t fie;
             memset(&fie, 0xFF, sizeof(file_indir_entry_t));
             SET_FLASH_BLOCK_IDX(fie.seq_block[0], seq_block_idx.value);
             ret = write_file_indir_entry(fs, f->meta.indir.block,
                                          new_indir_entry_num.value, &fie);
-            CHECK_OK_BASIC(ret);
+            RETURN_ON_ERR(ret);
 
             fie_flags = mark_entry_committed(fie_flags);
             ret = write_file_indir_entry_flags(
                 fs, f->meta.indir.block, new_indir_entry_num.value, &fie_flags);
-            CHECK_OK_BASIC(ret);
+            RETURN_ON_ERR(ret);
 
             f->meta.seq.last_block = seq_block_idx.value;
             f->meta.seq.next_entry = 0;
@@ -580,7 +580,7 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
         fse_flags = mark_entry_used(fse_flags);
         ret = write_file_seq_entry_flags(fs, f->meta.seq.last_block,
                                          f->meta.seq.next_entry, &fse_flags);
-        CHECK_OK_BASIC(ret);
+        RETURN_ON_ERR(ret);
 
         file_seq_entry_t fse;
         memset(&fse, 0xFF, sizeof(file_seq_entry_t));
@@ -599,7 +599,7 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
         fse_flags = mark_entry_committed(fse_flags);
         ret = write_file_seq_entry_flags(fs, f->meta.seq.last_block,
                                          f->meta.seq.next_entry, &fse_flags);
-        CHECK_OK_BASIC(ret);
+        RETURN_ON_ERR(ret);
 
         f->meta.seq.next_entry++;
 
