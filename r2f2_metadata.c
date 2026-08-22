@@ -721,13 +721,17 @@ void dump_file_seq_block(FILE *f, r2f2_fs_t *fs, block_idx prev_block,
 
     entry_flags_t fse_flags;
     memset(&fse_flags, 0xFF, sizeof(entry_flags_t));
+    file_seq_entry_t fse;
     for (size_t i = 0; i < NUM_FILE_SEQ_ENTRIES; i++) {
+        read_file_seq_entry(fs, file_seq_block, i, &fse);
         read_file_seq_entry_flags(fs, file_seq_block, i, &fse_flags);
-        if (is_entry_used(fse_flags) == ENTRY_FLAG_SET &&
-            is_entry_committed(fse_flags) == ENTRY_FLAG_SET) {
-            file_seq_entry_t fse;
-            read_file_seq_entry(fs, file_seq_block, i, &fse);
-            fprintf(f, "{fill %u | offs %u | file size %u | data block %u} | ",
+        if (!is_all_one(&fse, sizeof(file_seq_entry_t))) {
+            fprintf(f,
+                    "{entries[%zu]: | used=%d,comm=%d,recl=%d | fill %u | offs "
+                    "%u | file size %u | data block %u} | ",
+                    i, is_entry_used(fse_flags) == ENTRY_FLAG_SET,
+                    is_entry_committed(fse_flags) == ENTRY_FLAG_SET,
+                    is_entry_reclaimable(fse_flags) == ENTRY_FLAG_SET,
                     GET_FLASH_U32(fse.data_block_fill_level).value,
                     GET_FLASH_U32(fse.data_block_offset_in_file).value,
                     GET_FLASH_U32(fse.current_file_size).value,
@@ -792,8 +796,8 @@ void dump_file_indir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block,
 void dump_dir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block) {
     fprintf(f,
             "\ndir_block_%d [shape=record, fillcolor=\"#ffe599\", "
-            "\nlabel=\"{dir_block %u | { ",
-            dir_block, dir_block);
+            "\nlabel=\"{<db%u> dir_block %u | { ",
+            dir_block, dir_block, dir_block);
 
     dir_meta_entry_t dme;
     for (size_t d = 0; d < NUM_DIR_META_ENTRIES; d++) {
@@ -805,7 +809,8 @@ void dump_dir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block) {
             RESULT(block_idx) next_block = get_valid_next_block(fs, next);
             if (next_block.code != RET_OK) {
                 R2F2_LOG_ERR("no valid next block");
-                return;
+                next_block.value = 0xdeadbeef;
+                /* return; */
             }
             entry_flags_t flags;
             read_dir_meta_entry_flags(fs, dir_block, d, &flags);
@@ -816,6 +821,10 @@ void dump_dir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block) {
                     is_entry_committed(flags) == ENTRY_FLAG_SET,
                     is_entry_reclaimable(flags) == ENTRY_FLAG_SET, d,
                     next_block.value);
+
+            fprintf(f, " [%u, %u] } | ",
+                    GET_FLASH_BLOCK_IDX(dme.next_block[0]).value,
+                    GET_FLASH_BLOCK_IDX((dme.next_block[1])).value);
         }
     }
 

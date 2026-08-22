@@ -2,6 +2,7 @@
 
 #include "r2f2_defines.h"
 #include <stdbool.h>
+#include <stddef.h>
 
 typedef struct fildes {
     char path[MAX_PATH_LEN];
