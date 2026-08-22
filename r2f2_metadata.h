@@ -44,19 +44,17 @@ struct __attribute__((packed)) r2f2_superblock {
 /*
  * 15       12 11          8 7         4 3         0
  * +----------+-------------+-----------+-----------+
- * | indirect | reclaimable |   used    |  commit   |
+ * | *unused* | reclaimable |   used    |  commit   |
  * +----------+-------------+-----------+-----------+
  */
 typedef uint16_t entry_flags_t;
 #  define ENTRY_COMMIT_SHIFT 0U
 #  define ENTRY_USED_SHIFT 4U
 #  define ENTRY_RECLAIMABLE_SHIFT 8U
-#  define ENTRY_INDIRECT_SHIFT 12U
 
 #  define ENTRY_COMMIT_MASK (0xFU << ENTRY_COMMIT_SHIFT)
 #  define ENTRY_USED_MASK (0xFU << ENTRY_USED_SHIFT)
 #  define ENTRY_RECLAIMABLE_MASK (0xFU << ENTRY_RECLAIMABLE_SHIFT)
-#  define ENTRY_INDIRECT_MASK (0xFU << ENTRY_INDIRECT_SHIFT)
 
 #else
 
@@ -64,7 +62,6 @@ typedef uint8_t entry_flags_t;
 #  define ENTRY_COMMIT_MASK (1U << 0)
 #  define ENTRY_USED_MASK (1U << 1)
 #  define ENTRY_RECLAIMABLE_MASK (1U << 2)
-#  define ENTRY_INDIRECT_MASK (1U << 3)
 #endif
 
 typedef enum {
@@ -77,12 +74,18 @@ typedef enum {
 entry_flags_t mark_entry_committed(entry_flags_t f);
 entry_flags_t mark_entry_used(entry_flags_t f);
 entry_flags_t mark_entry_reclaimable(entry_flags_t f);
-entry_flags_t mark_entry_indirect(entry_flags_t f);
 /* check state of the corresponding bit(s) */
 entry_flag_state_t is_entry_committed(entry_flags_t f);
 entry_flag_state_t is_entry_used(entry_flags_t f);
 entry_flag_state_t is_entry_reclaimable(entry_flags_t f);
-entry_flag_state_t is_entry_indirect(entry_flags_t f);
+
+#define BLOCK_TYPE_DIR (0x00FFFFFFU)
+#define BLOCK_TYPE_SEQ (0x0000FFFFU)
+#define BLOCK_TYPE_INDIR (0x000000FFU)
+/* TODO: add own block idx? */
+typedef struct __attribute__((packed)) block_header {
+    flash_u32 type;
+} block_header_t;
 
 typedef struct __attribute__((packed)) dir_meta_entry {
     char path[MAX_PATH_LEN];
@@ -90,6 +93,8 @@ typedef struct __attribute__((packed)) dir_meta_entry {
 } dir_meta_entry_t;
 
 typedef struct dir_meta_block {
+    block_header_t header;
+
     entry_flags_t f[NUM_DIR_META_ENTRIES];
     struct dir_meta_entry entries[NUM_DIR_META_ENTRIES];
     flash_block_idx next[NUM_NEXT_PTRS];
@@ -100,6 +105,8 @@ typedef struct __attribute__((packed)) file_indir_entry {
 } file_indir_entry_t;
 
 typedef struct __attribute__((packed)) file_indir_block {
+    block_header_t header;
+
     char path[MAX_PATH_LEN];
 
     entry_flags_t f[NUM_FILE_INDIR_ENTRIES];
@@ -121,6 +128,8 @@ typedef struct __attribute__((packed)) file_seq_entry {
 } file_seq_entry_t;
 
 typedef struct __attribute__((packed)) file_seq_block {
+    block_header_t header;
+
     entry_flags_t f[NUM_FILE_SEQ_ENTRIES];
     struct file_seq_entry entries[NUM_FILE_SEQ_ENTRIES];
 } file_seq_block_t;
@@ -128,6 +137,11 @@ typedef struct __attribute__((packed)) file_seq_block {
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+r2f2_ret read_block_header(r2f2_fs_t *fs, block_idx b, void *buf);
+r2f2_ret write_block_header(r2f2_fs_t *fs, block_idx b, uint32_t type);
+
+RESULT(uint32_t) get_block_type(r2f2_fs_t *fs, block_idx b);
 
 /**
  * next_block entries are actually arrays, with the length NUM_NEXT_PTRS (2 by

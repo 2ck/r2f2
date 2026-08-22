@@ -4,6 +4,43 @@
 #include <stddef.h>
 #include <string.h>
 
+r2f2_ret read_block_header(r2f2_fs_t *fs, block_idx b, void *buf) {
+    if (!buf) {
+        return RET_EINVAL;
+    }
+
+    if (b > fs->cfg->geom.num_blocks) {
+        R2F2_LOG_ERR("out of bounds block %u", b);
+        return RET_OOB;
+    }
+
+    r2f2_ret ret = fs->cfg->flash_read(fs, b * fs->cfg->geom.block_size,
+                                       sizeof(block_header_t), buf);
+    return ret;
+}
+
+r2f2_ret write_block_header(r2f2_fs_t *fs, block_idx b, uint32_t type) {
+    if (b > fs->cfg->geom.num_blocks) {
+        R2F2_LOG_ERR("out of bounds block %u", b);
+        return RET_OOB;
+    }
+    flash_u32 _type;
+    SET_FLASH_U32(_type, type);
+    r2f2_ret ret = fs->cfg->flash_write(fs, b * fs->cfg->geom.block_size,
+                                        sizeof(block_header_t), &_type);
+    return ret;
+}
+
+RESULT(uint32_t) get_block_type(r2f2_fs_t *fs, block_idx b) {
+    block_header_t hdr;
+    r2f2_ret ret = read_block_header(fs, b, &hdr);
+    if (ret != RET_OK) {
+        return RESULT_ERR(uint32_t, ret);
+    }
+    RESULT(uint32_t) block_type = GET_FLASH_U32(hdr.type);
+    return block_type;
+}
+
 RESULT(block_idx) get_valid_next_block(r2f2_fs_t *fs,
                                        flash_block_idx *indices) {
     if (!indices) {
@@ -45,10 +82,6 @@ entry_flags_t mark_entry_reclaimable(entry_flags_t f) {
     return f & ~ENTRY_RECLAIMABLE_MASK;
 }
 
-entry_flags_t mark_entry_indirect(entry_flags_t f) {
-    return f & ~ENTRY_INDIRECT_MASK;
-}
-
 static entry_flag_state_t entry_flag_state(entry_flags_t f,
                                            entry_flags_t mask) {
 #ifdef ECC_ON_METADATA
@@ -75,10 +108,6 @@ entry_flag_state_t is_entry_used(entry_flags_t f) {
 
 entry_flag_state_t is_entry_reclaimable(entry_flags_t f) {
     return entry_flag_state(f, ENTRY_RECLAIMABLE_MASK);
-}
-
-entry_flag_state_t is_entry_indirect(entry_flags_t f) {
-    return entry_flag_state(f, ENTRY_INDIRECT_MASK);
 }
 
 r2f2_ret read_dir_meta_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
@@ -764,11 +793,10 @@ void dump_dir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block) {
             entry_flags_t flags;
             read_dir_meta_entry_flags(fs, dir_block, d, &flags);
             fprintf(f,
-                    "{ \\\"%s\\\" | used=%d,comm=%d,\\\nindir=%d,recl=%d | "
-                    "<e%zu> %u} | ",
+                    "{ \\\"%s\\\" | used=%d,comm=%d,\\\nrecl=%d | "
+                    "<e%zu> %u | ",
                     dme.path, is_entry_used(flags) == ENTRY_FLAG_SET,
                     is_entry_committed(flags) == ENTRY_FLAG_SET,
-                    is_entry_indirect(flags) == ENTRY_FLAG_SET,
                     is_entry_reclaimable(flags) == ENTRY_FLAG_SET, d,
                     next_block.value);
         }
@@ -787,14 +815,37 @@ void dump_dir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block) {
                 R2F2_LOG_ERR("no valid next block");
                 return;
             }
-            entry_flags_t flags;
-            read_dir_meta_entry_flags(fs, dir_block, d, &flags);
-            if (is_entry_indirect(flags) == ENTRY_FLAG_SET) {
+            RESULT(uint32_t) block_type = get_block_type(fs, next_block.value);
+            if (block_type.code != RET_OK) {
+                return;
+            }
+            if (block_type.value == BLOCK_TYPE_DIR) {
+                dump_dir_block(f, fs, next_block.value);
+                fprintf(f, "\ndir_block_%u:e%zu -> dir_block_%u", dir_block, d,
+                        next_block.value);
+            } else if (block_type.value == BLOCK_TYPE_INDIR) {
                 dump_file_indir_block(f, fs, dir_block, d, next_block.value);
             } else {
                 dump_file_seq_block(f, fs, dir_block, d, next_block.value, 1);
             }
         }
+    }
+
+    flash_block_idx next[NUM_NEXT_PTRS];
+
+    r2f2_ret read_ret = fs->cfg->flash_read(
+        fs,
+        dir_block * fs->cfg->geom.block_size + offsetof(dir_meta_block_t, next),
+        sizeof(next), next);
+    if (read_ret != RET_OK) {
+        return;
+    }
+
+    RESULT(block_idx) next_block = get_valid_next_block(fs, next);
+    if (next_block.code == RET_OK) {
+        dump_dir_block(f, fs, next_block.value);
+        fprintf(f, "\ndir_block_%u:db%u -> dir_block_%u", dir_block, dir_block,
+                next_block.value);
     }
 }
 

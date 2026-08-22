@@ -183,6 +183,10 @@ RESULT(block_idx) r2f2_create_next_dir_meta_block(r2f2_fs_t *fs,
     if (new_block.code != RET_OK) {
         return new_block;
     }
+    ret = write_block_header(fs, new_block.value, BLOCK_TYPE_DIR);
+    if (ret != RET_OK) {
+        return RESULT_ERR(block_idx, ret);
+    }
 
     SET_FLASH_BLOCK_IDX(next[0], new_block.value);
 
@@ -203,13 +207,16 @@ r2f2_ret r2f2_migrate_file_to_indir_block(r2f2_fs_t *fs, r2f2_fd fd) {
 
     RESULT(block_idx) indir_block_idx = allocate_block(fs);
     CHECK_OK_RETURN(indir_block_idx);
+    r2f2_ret ret =
+        write_block_header(fs, indir_block_idx.value, BLOCK_TYPE_INDIR);
+    CHECK_OK_BASIC(ret);
 
     /* create initial indir_entry in our new indir_block */
 
     entry_flags_t fie_flags;
     memset(&fie_flags, 0xFF, sizeof(entry_flags_t));
     fie_flags = mark_entry_used(fie_flags);
-    r2f2_ret ret =
+    ret =
         write_file_indir_entry_flags(fs, indir_block_idx.value, 0, &fie_flags);
     CHECK_OK_BASIC(ret);
 
@@ -251,11 +258,6 @@ r2f2_ret r2f2_migrate_file_to_indir_block(r2f2_fs_t *fs, r2f2_fd fd) {
     memset(&dme_flags, 0xFF, sizeof(entry_flags_t));
     ret = read_dir_meta_entry_flags(fs, f->meta.dir.block, f->meta.dir.entry,
                                     &dme_flags);
-    CHECK_OK_BASIC(ret);
-
-    dme_flags = mark_entry_indirect(dme_flags);
-    ret = write_dir_meta_entry_flags(fs, f->meta.dir.block, f->meta.dir.entry,
-                                     &dme_flags);
     CHECK_OK_BASIC(ret);
 
     ret = write_dir_meta_entry(fs, f->meta.dir.block, f->meta.dir.entry, &dme);
@@ -311,11 +313,16 @@ RESULT(r2f2_fd) r2f2_register_file(r2f2_fs_t *fs, const char *path) {
     if (file_seq_block_idx.code != RET_OK) {
         return RESULT_ERR(r2f2_fd, file_seq_block_idx.code);
     }
+    r2f2_ret ret =
+        write_block_header(fs, file_seq_block_idx.value, BLOCK_TYPE_SEQ);
+    if (ret != RET_OK) {
+        return RESULT_ERR(r2f2_fd, ret);
+    }
 
     dir_meta_entry_t dme;
     memset(&dme, 0xFF, sizeof(dir_meta_entry_t));
 
-    r2f2_ret ret = set_path_to_basename_zeroed(dme.path, path);
+    ret = set_path_to_basename_zeroed(dme.path, path);
     if (ret != RET_OK) {
         return RESULT_ERR(r2f2_fd, ret);
     }

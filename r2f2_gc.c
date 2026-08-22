@@ -24,7 +24,6 @@ RESULT(uint32_t) r2f2_gc_entry(r2f2_fs_t *fs, size_t target) {
             return RESULT_ERR(uint32_t, ret);
         }
         if (is_entry_reclaimable(flags) == ENTRY_FLAG_SET) {
-            uint32_t freed_blocks = r2f2_reclaim_file_blocks(fs, &dme, flags);
             /* overwrite dir entry */
             memset(&dme, 0, sizeof(dir_meta_entry_t));
             r2f2_ret ret = write_dir_meta_entry(fs, dir_block, d, &dme);
@@ -34,9 +33,9 @@ RESULT(uint32_t) r2f2_gc_entry(r2f2_fs_t *fs, size_t target) {
                     dir_block);
                 return RESULT_ERR(uint32_t, ret);
             }
-            freed += freed_blocks;
             if (freed >= target) {
                 return RESULT_OK(uint32_t, freed);
+                freed += r2f2_reclaim_file_blocks(fs, &dme);
             }
         } else {
             block_reclaimable = false;
@@ -60,8 +59,7 @@ RESULT(uint32_t) r2f2_gc_entry(r2f2_fs_t *fs, size_t target) {
     return RESULT_ERR(uint32_t, RET_NOMEM);
 }
 
-uint32_t r2f2_reclaim_file_blocks(r2f2_fs_t *fs, dir_meta_entry_t *dme,
-                                  entry_flags_t flags) {
+uint32_t r2f2_reclaim_file_blocks(r2f2_fs_t *fs, dir_meta_entry_t *dme) {
     uint32_t freed = 0;
     flash_block_idx next[NUM_NEXT_PTRS];
     memcpy(next, dme->next_block, sizeof(next));
@@ -71,10 +69,14 @@ uint32_t r2f2_reclaim_file_blocks(r2f2_fs_t *fs, dir_meta_entry_t *dme,
          * entry 0 is always a seq_block, which is only upgraded to an
          * indir_block starting from the next entry
          */
-        if (is_entry_indirect(flags) == ENTRY_FLAG_SET) {
+        RESULT(uint32_t) block_type = get_block_type(fs, next_block.value);
+        CHECK_OK_RETURN(block_type);
+        if (block_type.value == BLOCK_TYPE_INDIR) {
             freed += r2f2_reclaim_indir_block(fs, next_block.value);
-        } else {
+        } else if (block_type.value == BLOCK_TYPE_SEQ) {
             freed += r2f2_reclaim_seq_block(fs, next_block.value);
+        } else {
+            R2F2_LOG_ERR("unexpected dir_block in gc");
         }
 
         free_block(fs, next_block.value);
@@ -173,12 +175,14 @@ r2f2_ret r2f2_migrate_root_dir_block(r2f2_fs_t *fs) {
             continue;
         }
 
-        /* we have to copy at least one entry over */
+        /* we reach this point if we have to copy at least one entry over */
         if (!alloced) {
             b = allocate_block(fs);
             if (b.code != RET_OK) {
                 return b.code;
             }
+            r2f2_ret ret = write_block_header(fs, b.value, BLOCK_TYPE_DIR);
+            CHECK_OK_BASIC(ret);
             alloced = true;
         }
 
@@ -227,6 +231,8 @@ r2f2_ret r2f2_migrate_root_dir_block(r2f2_fs_t *fs) {
             if (b.code != RET_OK) {
                 return b.code;
             }
+            r2f2_ret ret = write_block_header(fs, b.value, BLOCK_TYPE_DIR);
+            CHECK_OK_BASIC(ret);
             fs->root_dir_block = b.value;
         }
     }

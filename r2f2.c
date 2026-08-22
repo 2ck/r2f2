@@ -18,13 +18,16 @@ r2f2_ret r2f2_format(r2f2_fs_t *fs) {
     if (b.code != RET_OK) {
         return b.code;
     }
+
+    r2f2_ret ret = write_block_header(fs, b.value, BLOCK_TYPE_DIR);
+    CHECK_OK_BASIC(ret);
     /* TODO: remove this and just search for it in block 1/2 or something */
     /* alternatively, make this have several next_block-pointers */
 
     SET_FLASH_BLOCK_IDX(fs_info.root_dir_block, b.value);
     fs->root_dir_block = b.value;
 
-    r2f2_ret ret =
+    ret =
         fs->cfg->flash_write(fs, R2F2_SUPERBLOCK_IDX * fs->cfg->geom.block_size,
                              sizeof(r2f2_fs_info_t), &fs_info);
 
@@ -131,9 +134,11 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
 
         /*
          * The dir_meta_entry could point directly to a file_seq_block, or do so
-         * via a file_indir_block, and the flags tell us how it is.
+         * via a file_indir_block, and the next block's header tells us.
          */
-        if (is_entry_indirect(dir_ret.dme_flags) == ENTRY_FLAG_SET) {
+        RESULT(uint32_t) block_type = get_block_type(fs, next_block.value);
+        CHECK_OK_RETURN(block_type);
+        if (block_type.value == BLOCK_TYPE_INDIR) {
             indir_block_idx = next_block.value;
             RESULT(uint32_t) last_fie =
                 get_last_file_indir_entry(fs, indir_block_idx);
@@ -302,6 +307,8 @@ r2f2_ret r2f2_mkdir(r2f2_fs_t *fs, const char *path) {
         memset(dme.next_block, 0xFF, sizeof(dme.next_block));
         RESULT(block_idx) next_block = allocate_block(fs);
         CHECK_OK_RETURN(next_block);
+        ret = write_block_header(fs, next_block.value, BLOCK_TYPE_DIR);
+        CHECK_OK_BASIC(ret);
         SET_FLASH_BLOCK_IDX(dme.next_block[0], next_block.value);
 
         entry_flags_t flags;
@@ -533,6 +540,8 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
             if (seq_block_idx.code != RET_OK) {
                 return seq_block_idx.code;
             }
+            ret = write_block_header(fs, seq_block_idx.value, BLOCK_TYPE_SEQ);
+            CHECK_OK_BASIC(ret);
 
             RESULT(uint32_t) new_indir_entry_num =
                 get_free_file_indir_entry(fs, f->meta.indir.block);
