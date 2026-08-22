@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
     {
         const char *filename = "/testfile";
         int ret = r2f2_open(&fs, filename, O_CREAT | O_RDWR);
-        if (ret != RET_OK) {
+        if (ret < 0) {
             printf("R2F2 open file '%s' failed (%d)\n", filename, ret);
             return ret;
         } else {
@@ -90,7 +90,7 @@ int main(int argc, char **argv) {
     {
         const char *filename = "/testfile";
         int ret = r2f2_open(&fs, filename, O_RDWR);
-        if (ret != RET_OK) {
+        if (ret < 0) {
             printf("R2F2 open file '%s' failed (%d)\n", filename, ret);
             return ret;
         } else {
@@ -103,7 +103,7 @@ int main(int argc, char **argv) {
     {
         const char *filename = "/foo/bar/testfile";
         int ret = r2f2_open(&fs, filename, O_CREAT | O_RDWR);
-        if (ret == RET_OK) {
+        if (ret >= 0) {
             printf("R2F2 open file '%s' succeeded when it shouldn't have "
                    "(missing directory)\n",
                    filename);
@@ -154,6 +154,35 @@ int main(int argc, char **argv) {
         } else {
             printf("R2F2 read '%s' (%zu B) from file '%s' okay\n", read_buf,
                    strlen(write_buf) + 1, filename);
+        }
+    }
+
+    /* mkdir */
+    {
+        const char *dirname = "/foobar/";
+        int ret = r2f2_mkdir(&fs, dirname);
+        if (ret != RET_OK) {
+            printf("R2F2 mkdir '%s' failed (%d)\n", dirname, ret);
+        } else {
+            printf("R2F2 mkdir '%s' okay\n", dirname);
+        }
+
+        const char *filename = "/foobar/subdirfile";
+        int fd2;
+        ret = r2f2_open(&fs, filename, O_CREAT | O_RDWR);
+        if (ret < 0) {
+            printf("R2F2 open file '%s' failed (%d)\n", filename, ret);
+            return ret;
+        } else {
+            printf("R2F2 open file '%s' okay\n", filename);
+            fd2 = ret;
+        }
+        ret = r2f2_close(&fs, fd2);
+        if (ret != RET_OK) {
+            printf("R2F2 close fd %d failed (%d)\n", fd2, ret);
+            return ret;
+        } else {
+            printf("R2F2 close fd %d okay\n", fd2);
         }
     }
 
