@@ -144,13 +144,19 @@ r2f2_ret write_block_header(r2f2_fs_t *fs, block_idx b, uint32_t type);
 RESULT(uint32_t) get_block_type(r2f2_fs_t *fs, block_idx b);
 
 /**
+ * returns the value of the last valid next_block entry
+ *
  * next_block entries are actually arrays, with the length NUM_NEXT_PTRS (2 by
  * default). A value can be all 1 (unused), all 0 (no longer valid/overridden)
  * or some valid block_idx. Later entries always override previous entries.
- *
- * returns the value of the last valid next_block entry
  */
 RESULT(block_idx) get_valid_next_block(r2f2_fs_t *fs, flash_block_idx *indices);
+
+/**
+ * returns the index of the first unused next_block entry
+ */
+RESULT(uint32_t) get_unused_next_ptr_idx(r2f2_fs_t *fs,
+                                         flash_block_idx *indices);
 
 r2f2_ret read_dir_meta_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
                              dir_meta_entry_t *buf);

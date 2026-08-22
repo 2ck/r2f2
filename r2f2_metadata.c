@@ -41,6 +41,23 @@ RESULT(uint32_t) get_block_type(r2f2_fs_t *fs, block_idx b) {
     return block_type;
 }
 
+RESULT(uint32_t) get_unused_next_ptr_idx(r2f2_fs_t *fs,
+                                         flash_block_idx *indices) {
+    if (!indices) {
+        return RESULT_ERR(uint32_t, RET_EINVAL);
+    }
+
+    for (size_t i = 0; i < NUM_NEXT_PTRS; i++) {
+        RESULT(block_idx) b = GET_FLASH_BLOCK_IDX(indices[i]);
+        CHECK_OK_PROPAGATE(b, uint32_t);
+        /* this entry was unused, so no more valid entry can come */
+        if (b.value >= fs->cfg->geom.num_blocks) {
+            return RESULT_OK(uint32_t, i);
+        }
+    }
+    return RESULT_ERR(uint32_t, RET_NOMEM);
+}
+
 RESULT(block_idx) get_valid_next_block(r2f2_fs_t *fs,
                                        flash_block_idx *indices) {
     if (!indices) {

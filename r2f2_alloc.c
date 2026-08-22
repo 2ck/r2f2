@@ -152,6 +152,9 @@ static inline void advance_ptr(r2f2_fs_t *fs, uint32_t *_ptr) {
     *_ptr = ptr;
 }
 
+/* TODO: any time we allocate in some function but can early-return before we
+ * consume the block, we need to cleanup and re-free it or we lose it
+ * permanently */
 RESULT(block_idx) allocate_block(r2f2_fs_t *fs) {
     if (_alloc_ptr == _next_free_ptr) {
         RESULT(uint32_t) gc_ret = r2f2_gc_entry(fs, 1);
@@ -182,11 +185,13 @@ RESULT(block_idx) allocate_block(r2f2_fs_t *fs) {
     block_idx b = bix.value;
 
     if (b < _first_allocable_block || b >= fs->cfg->geom.num_blocks) {
-        R2F2_LOG_ERR("alloc: block_entry %u at alloc pointer 0x%x  (off %u) "
-                     "invalid",
-                     b, _alloc_ptr,
-                     _alloc_ptr -
-                         (_allocator_first_block * fs->cfg->geom.block_size));
+        R2F2_LOG_ERR(
+            "alloc: block_entry %u at alloc pointer 0x%x  (off %u, idx %zu) "
+            "invalid",
+            b, _alloc_ptr,
+            _alloc_ptr - (_allocator_first_block * fs->cfg->geom.block_size),
+            (_alloc_ptr - (_allocator_first_block * fs->cfg->geom.block_size)) /
+                sizeof(alloc_block_entry_t));
         return RESULT_ERR(block_idx, RET_ERR);
     }
 
@@ -202,6 +207,7 @@ RESULT(block_idx) allocate_block(r2f2_fs_t *fs) {
 
     _total_free--;
     /* R2F2_LOG_INFO("allocate block %u, total free %zu", b, _total_free); */
+
     return RESULT_OK(block_idx, b);
 }
 
