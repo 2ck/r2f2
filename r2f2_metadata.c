@@ -206,7 +206,7 @@ r2f2_ret read_file_indir_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
     r2f2_ret ret = fs->cfg->flash_read(fs,
                                        b * fs->cfg->geom.block_size +
                                            offsetof(file_indir_block_t, f) +
-                                           idx * sizeof(file_indir_entry_t),
+                                           idx * sizeof(entry_flags_t),
                                        sizeof(entry_flags_t), buf);
     if (ret != RET_OK) {
         R2F2_LOG_ERR("failed (%d) to read file_indir_entry %u flags in block "
@@ -225,7 +225,7 @@ r2f2_ret write_file_indir_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
     r2f2_ret ret = fs->cfg->flash_write(fs,
                                         b * fs->cfg->geom.block_size +
                                             offsetof(file_indir_block_t, f) +
-                                            idx * sizeof(file_indir_entry_t),
+                                            idx * sizeof(entry_flags_t),
                                         sizeof(entry_flags_t), buf);
     if (ret != RET_OK) {
         R2F2_LOG_ERR("failed (%d) to write file_indir_entry %u flags in block "
@@ -283,7 +283,7 @@ r2f2_ret read_file_seq_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
     r2f2_ret ret = fs->cfg->flash_read(fs,
                                        b * fs->cfg->geom.block_size +
                                            offsetof(file_seq_block_t, f) +
-                                           idx * sizeof(file_seq_entry_t),
+                                           idx * sizeof(entry_flags_t),
                                        sizeof(entry_flags_t), buf);
     if (ret != RET_OK) {
         R2F2_LOG_ERR(
@@ -302,7 +302,7 @@ r2f2_ret write_file_seq_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
     r2f2_ret ret = fs->cfg->flash_write(fs,
                                         b * fs->cfg->geom.block_size +
                                             offsetof(file_seq_block_t, f) +
-                                            idx * sizeof(file_seq_entry_t),
+                                            idx * sizeof(entry_flags_t),
                                         sizeof(entry_flags_t), buf);
     if (ret != RET_OK) {
         R2F2_LOG_ERR(

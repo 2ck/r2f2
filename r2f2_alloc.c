@@ -252,7 +252,8 @@ r2f2_ret free_block(r2f2_fs_t *fs, block_idx b) {
         return ret;
     }
 
-    alloc_block_entry_t entry = {.b = b};
+    alloc_block_entry_t entry;
+    SET_FLASH_BLOCK_IDX(entry.b, b);
     ret = fs->cfg->flash_write(fs, _next_free_ptr, sizeof(alloc_block_entry_t),
                                &entry);
     if (ret != RET_OK) {
