@@ -68,7 +68,7 @@ typedef flash_u32 flash_block_idx;
 
 #  define MAX_PATH_LEN (118U)
 
-#  define NUM_DIR_META_ENTRIES (32U)
+#  define NUM_DIR_META_ENTRIES (31U)
 #  define NUM_FILE_INDIR_ENTRIES (384U)
 #  define NUM_FILE_SEQ_ENTRIES (128U)
 

@@ -24,8 +24,10 @@
 
 typedef struct __attribute__((packed)) alloc_block_entry {
     flash_block_idx b;
+#ifdef ECC_ON_METADATA
     /* TODO: can we get rid of this */
     uint8_t padding;
+#endif
 } alloc_block_entry_t;
 
 #ifdef __cplusplus
