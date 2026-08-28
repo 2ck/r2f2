@@ -27,9 +27,10 @@ r2f2_ret r2f2_format(r2f2_fs_t *fs) {
     SET_FLASH_BLOCK_IDX(fs_info.root_dir_block, b.value);
     fs->root_dir_block = b.value;
 
-    ret =
-        fs->cfg->flash_write(fs, R2F2_SUPERBLOCK_IDX * fs->cfg->geom.block_size,
-                             sizeof(r2f2_fs_info_t), &fs_info);
+    ret = fs->cfg->flash_write(fs,
+                               R2F2_SUPERBLOCK_IDX * fs->cfg->geom.block_size +
+                                   offsetof(r2f2_superblock_t, fs_info),
+                               sizeof(r2f2_fs_info_t), &fs_info);
 
     if (ret != RET_OK) {
         R2F2_LOG_ERR("flash write failed at block %u", R2F2_SUPERBLOCK_IDX);
@@ -63,7 +64,9 @@ r2f2_ret r2f2_mount(r2f2_fs_t *fs) {
 
     r2f2_fs_info_t fs_info;
     /* read root block to see if there is logfs on flash */
-    fs->cfg->flash_read(fs, R2F2_SUPERBLOCK_IDX * fs->cfg->geom.block_size,
+    fs->cfg->flash_read(fs,
+                        R2F2_SUPERBLOCK_IDX * fs->cfg->geom.block_size +
+                            offsetof(r2f2_superblock_t, fs_info),
                         sizeof(r2f2_fs_info_t), &fs_info);
 
     /* TODO: check if base block contents match cfg */

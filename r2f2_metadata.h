@@ -35,7 +35,16 @@ struct __attribute__((packed)) r2f2_fs_info {
     flash_block_idx root_dir_block;
 };
 
+#define BLOCK_TYPE_DIR (0x00FFFFFFU)
+#define BLOCK_TYPE_SEQ (0x0000FFFFU)
+#define BLOCK_TYPE_INDIR (0x000000FFU)
+/* TODO: add own block idx? */
+typedef struct __attribute__((packed)) block_header {
+    flash_u32 type;
+} block_header_t;
+
 struct __attribute__((packed)) r2f2_superblock {
+    block_header_t header;
     r2f2_fs_info_t fs_info;
 };
 
@@ -78,14 +87,6 @@ entry_flags_t mark_entry_reclaimable(entry_flags_t f);
 entry_flag_state_t is_entry_committed(entry_flags_t f);
 entry_flag_state_t is_entry_used(entry_flags_t f);
 entry_flag_state_t is_entry_reclaimable(entry_flags_t f);
-
-#define BLOCK_TYPE_DIR (0x00FFFFFFU)
-#define BLOCK_TYPE_SEQ (0x0000FFFFU)
-#define BLOCK_TYPE_INDIR (0x000000FFU)
-/* TODO: add own block idx? */
-typedef struct __attribute__((packed)) block_header {
-    flash_u32 type;
-} block_header_t;
 
 typedef struct __attribute__((packed)) dir_meta_entry {
     char path[MAX_PATH_LEN];
