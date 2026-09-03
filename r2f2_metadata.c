@@ -815,9 +815,10 @@ void dump_dir_block(FILE *f, r2f2_fs_t *fs, block_idx dir_block) {
             entry_flags_t flags;
             read_dir_meta_entry_flags(fs, dir_block, d, &flags);
             fprintf(f,
-                    "{ \\\"%s\\\" | used=%d,comm=%d,\\\nrecl=%d | "
+                    "{ \\\"%.*s\\\" | used=%d,comm=%d,\\\nrecl=%d | "
                     "<e%zu> %u | ",
-                    dme.path, is_entry_used(flags) == ENTRY_FLAG_SET,
+                    MAX_PATH_LEN, dme.path,
+                    is_entry_used(flags) == ENTRY_FLAG_SET,
                     is_entry_committed(flags) == ENTRY_FLAG_SET,
                     is_entry_reclaimable(flags) == ENTRY_FLAG_SET, d,
                     next_block.value);
