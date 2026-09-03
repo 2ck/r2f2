@@ -139,6 +139,7 @@ r2f2_ret restore_block_allocator(r2f2_fs_t *fs) {
     }
     R2F2_LOG_DEBUG("restored _alloc_ptr %u, _next_free_ptr %u", _alloc_ptr,
                    _next_free_ptr);
+    _total_free = (_next_free_ptr - _alloc_ptr) / sizeof(alloc_block_entry_t);
     return RET_OK;
 }
 
