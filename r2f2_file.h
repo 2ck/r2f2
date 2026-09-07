@@ -29,15 +29,14 @@ typedef struct fildes {
         struct {
             block_idx last_block;
             size_t last_block_fill;
+            size_t last_block_offset_in_file;
         } data;
     } meta;
 
-#if R2F2_USE_WRITE_BUFFER
     struct {
         size_t count;
         uint8_t *data;
     } block_buffer;
-#endif
 } fildes_t;
 
 #ifdef __cplusplus

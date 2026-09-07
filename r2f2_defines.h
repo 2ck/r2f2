@@ -91,10 +91,6 @@ typedef block_idx flash_block_idx;
 
 #endif
 
-#ifndef R2F2_USE_WRITE_BUFFER
-#  define R2F2_USE_WRITE_BUFFER 1
-#endif
-
 #ifndef NUM_NEXT_PTRS
 #  define NUM_NEXT_PTRS 2
 #endif
@@ -110,3 +106,13 @@ typedef block_idx flash_block_idx;
         b;                                                                     \
     })
 #define SET_FLASH_BLOCK_IDX(bix, val) SET_FLASH_U32(bix, val)
+
+#ifndef ECC_ON_DATA
+#  define ECC_ON_DATA
+#endif
+
+#ifdef ECC_ON_DATA
+#  define ECC_BCH_DATA_M 12
+#  define ECC_BCH_DATA_T 8
+#  define ECC_BCH_DATA_ECCLEN 12
+#endif

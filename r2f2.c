@@ -65,6 +65,16 @@ r2f2_ret r2f2_mount(r2f2_fs_t *fs) {
     R2F2_ASSERT(fs->path_bch->ecc_bytes, ==, ECC_BCH_PATH_ECCLEN, "%u");
 #endif
 
+#ifdef ECC_ON_DATA
+    fs->data_bch = init_bch(ECC_BCH_DATA_M, ECC_BCH_DATA_T, 0);
+    R2F2_ASSERT((void *)fs->data_bch, !=, NULL, "%p");
+    R2F2_ASSERT(fs->data_bch->ecc_bytes, ==, ECC_BCH_DATA_ECCLEN, "%u");
+    /* data is stored in n-1 page-sized chunks, with parity in the last chunk */
+    size_t pages_per_block = fs->cfg->geom.block_size / fs->cfg->geom.page_size;
+    R2F2_ASSERT((pages_per_block - 1) * ECC_BCH_DATA_ECCLEN, <=,
+                fs->cfg->geom.page_size, "%zu");
+#endif
+
     r2f2_fs_info_t fs_info;
     /* read root block to see if there is logfs on flash */
     fs->cfg->flash_read(fs,
@@ -111,6 +121,10 @@ r2f2_ret r2f2_unmount(r2f2_fs_t *fs) {
 #ifdef ECC_ON_METADATA
     free_bch(fs->u32_bch);
     free_bch(fs->path_bch);
+#endif
+
+#ifdef ECC_ON_DATA
+    free_bch(fs->data_bch);
 #endif
 
     return any_ret;
@@ -196,6 +210,7 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
             f->meta.seq.next_entry = 0;
             f->meta.data.last_block = 0;
             f->meta.data.last_block_fill = 0;
+            f->meta.data.last_block_offset_in_file = 0;
             return fd.value;
         } else if (last_fse.code != RET_OK) {
             return last_fse.code;
@@ -233,6 +248,10 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
         RESULT(uint32_t) last_fill = GET_FLASH_U32(fse.data_block_fill_level);
         RETURN_ON_ERR(last_fill.code);
         f->meta.data.last_block_fill = last_fill.value;
+        RESULT(uint32_t) last_offset =
+            GET_FLASH_U32(fse.data_block_offset_in_file);
+        RETURN_ON_ERR(last_offset.code);
+        f->meta.data.last_block_offset_in_file = last_offset.value;
 
         return fd.value;
     } else if (ret == RET_NOT_FOUND && creat) {
@@ -399,31 +418,25 @@ ssize_t r2f2_read(r2f2_fs_t *fs, r2f2_fd fd, void *buf, size_t count) {
     size_t can_read_from_storage = f->file_size - f->file_offset;
     if (can_read_from_storage >= count) {
         /* we have to find the appropriate data block to read from */
-        RESULT(block_idx) b;
+        struct db_ret db_ret;
         if (f->meta.indir.block != 0) {
-            b = find_data_block_for_off(fs, f->meta.indir.block,
-                                        f->file_offset);
+            r2f2_ret ret = find_data_block_for_off(fs, f->meta.indir.block,
+                                                   f->file_offset, &db_ret);
+            RETURN_ON_ERR(ret);
         } else if (f->meta.seq.last_block != 0) {
-            b = find_data_block_for_off_direct(fs, f->meta.seq.last_block,
-                                               f->file_offset);
+            r2f2_ret ret = find_data_block_for_off_direct(
+                fs, f->meta.seq.last_block, f->file_offset, &db_ret);
+            RETURN_ON_ERR(ret);
         } else {
-            b = RESULT_ERR(block_idx, RET_ERR);
+            return RET_ERR;
         }
 
-        if (b.code != RET_OK) {
-            return b.code;
-        }
+        r2f2_ret ret = r2f2_read_data(
+            fs, db_ret.data_block_idx,
+            f->file_offset - db_ret.data_block_offset_in_file, count, buf);
+        RETURN_ON_ERR(ret);
 
-        r2f2_ret ret =
-            fs->cfg->flash_read(fs,
-                                b.value * fs->cfg->geom.block_size +
-                                    (f->file_offset % fs->cfg->geom.block_size),
-                                count, buf);
-        if (ret == RET_OK) {
-            return count;
-        } else {
-            return ret;
-        }
+        return count;
     } else {
         size_t to_read_from_fd_buf = count - can_read_from_storage;
         R2F2_LOG_ERR("have to read %zu B from fd buf", to_read_from_fd_buf);
@@ -443,7 +456,6 @@ ssize_t r2f2_write(r2f2_fs_t *fs, r2f2_fd fd, const void *buf, size_t count) {
 
     fildes_t *f = &fs->fds[fd];
 
-#if R2F2_USE_WRITE_BUFFER
     /*
      * Is there space in our fd's block buffer?
      * If so, we write what we can into our block buffer. If it's full before
@@ -451,9 +463,17 @@ ssize_t r2f2_write(r2f2_fs_t *fs, r2f2_fd fd, const void *buf, size_t count) {
      * buffer afterwards.
      */
 
+#ifdef ECC_ON_DATA
+    size_t data_block_capacity =
+        fs->cfg->geom.block_size - fs->cfg->geom.page_size;
+#else
+    size_t data_block_capacity = fs->cfg->geom.block_size;
+#endif
+
     size_t total_written = 0;
+
     while (total_written < count) {
-        if (f->block_buffer.count == fs->cfg->geom.block_size) {
+        if (f->block_buffer.count == data_block_capacity) {
             r2f2_ret ret = r2f2_fsync(fs, fd);
             if (ret != RET_OK) {
                 return ret;
@@ -464,7 +484,7 @@ ssize_t r2f2_write(r2f2_fs_t *fs, r2f2_fd fd, const void *buf, size_t count) {
         }
 
         size_t remaining_in_fd_buf =
-            fs->cfg->geom.block_size - f->block_buffer.count;
+            data_block_capacity - f->block_buffer.count;
         size_t remaining = count - total_written;
         size_t to_write = MIN(remaining_in_fd_buf, remaining);
 
@@ -479,9 +499,6 @@ ssize_t r2f2_write(r2f2_fs_t *fs, r2f2_fd fd, const void *buf, size_t count) {
         total_written += to_write;
     }
     return total_written;
-#endif
-
-    return RET_ERR;
 }
 
 r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
@@ -494,19 +511,26 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
 
     /* do we even have a data block yet? */
     if (f->meta.data.last_block == 0) {
+        /* TODO: can early abort or crash permanently lose a block? */
         RESULT(block_idx) data_block_idx = allocate_block(fs);
-        if (data_block_idx.code != RET_OK) {
-            return data_block_idx.code;
-        }
+        RETURN_ON_ERR(data_block_idx.code);
         f->meta.data.last_block = data_block_idx.value;
     }
 
     size_t total_written = 0;
-    while (total_written < f->block_buffer.count) {
-        size_t last_data_block_cap =
-            fs->cfg->geom.block_size - f->meta.data.last_block_fill;
+    /* Store the value because we modify the block buffer count in the loop */
+    size_t total_to_write = f->block_buffer.count;
+    while (total_written < total_to_write) {
+#ifdef ECC_ON_DATA
+        size_t data_block_capacity =
+            fs->cfg->geom.block_size - fs->cfg->geom.page_size;
+#else
+        size_t data_block_capacity = fs->cfg->geom.block_size;
+#endif
+        size_t last_data_block_capacity =
+            data_block_capacity - f->meta.data.last_block_fill;
 
-        if (last_data_block_cap == 0) {
+        if (last_data_block_capacity == 0) {
             RESULT(block_idx) b = allocate_block(fs);
             if (b.code != RET_OK) {
                 return b.code;
@@ -514,18 +538,16 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
 
             f->meta.data.last_block = b.value;
             f->meta.data.last_block_fill = 0;
-            last_data_block_cap = fs->cfg->geom.block_size;
+            f->meta.data.last_block_offset_in_file = f->file_size;
+            last_data_block_capacity = data_block_capacity;
         }
 
-        size_t to_write = MIN(f->block_buffer.count, last_data_block_cap);
+        size_t to_write = MIN(f->block_buffer.count, last_data_block_capacity);
 
-        R2F2_ASSERT(total_written + to_write, <=, fs->cfg->geom.block_size,
-                    "%zu");
-        r2f2_ret ret = fs->cfg->flash_write(
-            fs,
-            f->meta.data.last_block * fs->cfg->geom.block_size +
-                f->meta.data.last_block_fill,
-            to_write, f->block_buffer.data + total_written);
+        R2F2_ASSERT(total_written + to_write, <=, data_block_capacity, "%zu");
+        r2f2_ret ret = r2f2_write_data(fs, f->meta.data.last_block,
+                                       f->meta.data.last_block_fill, to_write,
+                                       f->block_buffer.data + total_written);
         if (ret != RET_OK) {
             R2F2_LOG_ERR("failed (%d) to write %zu B to flash in block %u", ret,
                          to_write, f->meta.data.last_block);
@@ -533,7 +555,15 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
         }
 
         /* update file information in fd and "empty" its block buffer */
+#ifdef ECC_ON_DATA
+        /* page-alignment in case to_write < page_size */
+        size_t physical_written = ((to_write + fs->cfg->geom.page_size - 1) /
+                                   fs->cfg->geom.page_size) *
+                                  fs->cfg->geom.page_size;
+        f->meta.data.last_block_fill += physical_written;
+#else
         f->meta.data.last_block_fill += to_write;
+#endif
         f->file_size += to_write;
         f->block_buffer.count -= to_write;
 
@@ -600,8 +630,7 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
         SET_FLASH_U32(fse.data_block_fill_level, f->meta.data.last_block_fill);
         R2F2_ASSERT(f->file_size, >, 0, "%zu");
         SET_FLASH_U32(fse.data_block_offset_in_file,
-                      fs->cfg->geom.block_size *
-                          ((f->file_size - 1) / fs->cfg->geom.block_size));
+                      f->meta.data.last_block_offset_in_file);
         SET_FLASH_U32(fse.current_file_size, f->file_size);
 
         /* write the entry, then persist via flags */

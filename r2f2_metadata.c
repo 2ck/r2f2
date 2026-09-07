@@ -41,6 +41,157 @@ RESULT(uint32_t) get_block_type(r2f2_fs_t *fs, block_idx b) {
     return block_type;
 }
 
+#ifdef ECC_ON_DATA
+r2f2_ret r2f2_write_data(r2f2_fs_t *fs, block_idx data_block,
+                         size_t data_block_fill, size_t data_len,
+                         uint8_t *data) {
+    /* TODO: validity checks */
+
+    R2F2_ASSERT(data_block_fill % fs->cfg->geom.page_size, ==, 0, "%zu");
+
+    size_t written = 0;
+    size_t chunk_idx = data_block_fill / fs->cfg->geom.page_size;
+
+    while (written < data_len) {
+        size_t to_write = MIN(data_len - written, fs->cfg->geom.page_size);
+        /*
+         * FIXME: smaller writes will currently cause bugs when reading back
+         * later, because we have no way of knowing the actual data size later.
+         * That's why we assert here to avoid later bug searches.
+         * A fix would be to include a size header with each chunk.
+         */
+        R2F2_ASSERT(to_write, ==, fs->cfg->geom.page_size, "%zu");
+
+        /* pad data to chunk size for ecc calculation */
+        uint8_t pg_buf[fs->cfg->geom.page_size];
+        memset(pg_buf, 0xFF, sizeof(pg_buf));
+
+        memcpy(pg_buf, data + written, to_write);
+
+        uint8_t ecc_buf[ECC_BCH_DATA_ECCLEN];
+        memset(ecc_buf, 0, sizeof(ecc_buf));
+        encode_bch(fs->data_bch, pg_buf, sizeof(pg_buf), ecc_buf);
+
+        size_t write_pos = data_block * fs->cfg->geom.block_size +
+                           chunk_idx * fs->cfg->geom.page_size;
+
+        r2f2_ret ret =
+            fs->cfg->flash_write(fs, write_pos, to_write, data + written);
+        RETURN_ON_ERR(ret);
+
+        size_t ecc_addr = (data_block + 1) * fs->cfg->geom.block_size -
+                          fs->cfg->geom.page_size +
+                          chunk_idx * ECC_BCH_DATA_ECCLEN;
+        ret = fs->cfg->flash_write(fs, ecc_addr, ECC_BCH_DATA_ECCLEN, ecc_buf);
+        RETURN_ON_ERR(ret);
+
+        written += to_write;
+        chunk_idx++;
+    }
+
+    return RET_OK;
+}
+#else
+r2f2_ret r2f2_write_data(r2f2_fs_t *fs, block_idx data_block,
+                         size_t data_block_fill, size_t data_len,
+                         uint8_t *data) {
+    size_t written = 0;
+
+    size_t data_addr = data_block * fs->cfg->geom.block_size + data_block_fill;
+
+    while (written < data_len) {
+        size_t to_write = MIN(data_len - written, fs->cfg->geom.page_size);
+        size_t write_pos = data_addr + written;
+        r2f2_ret ret =
+            fs->cfg->flash_write(fs, write_pos, to_write, data + written);
+        RETURN_ON_ERR(ret);
+        written += to_write;
+    }
+    return RET_OK;
+}
+#endif
+
+#ifdef ECC_ON_DATA
+r2f2_ret r2f2_read_data(r2f2_fs_t *fs, block_idx data_block, size_t off,
+                        size_t len, uint8_t *dst) {
+    R2F2_ASSERT(off % fs->cfg->geom.page_size, ==, 0, "%zu");
+
+    size_t read = 0;
+
+    size_t chunk_idx = off / fs->cfg->geom.page_size;
+
+    while (read < len) {
+        R2F2_ASSERT(chunk_idx, <,
+                    fs->cfg->geom.block_size / fs->cfg->geom.page_size - 1,
+                    "%zu");
+        size_t to_read = MIN(len - read, fs->cfg->geom.page_size);
+
+        size_t read_pos = data_block * fs->cfg->geom.block_size +
+                          chunk_idx * fs->cfg->geom.page_size;
+
+        uint8_t pg_buf[fs->cfg->geom.page_size];
+        memset(pg_buf, 0xFF, sizeof(pg_buf));
+
+        /* read whole chunk */
+        r2f2_ret ret =
+            fs->cfg->flash_read(fs, read_pos, fs->cfg->geom.page_size, pg_buf);
+        RETURN_ON_ERR(ret);
+
+        uint8_t ecc_buf[ECC_BCH_DATA_ECCLEN];
+        size_t ecc_addr = (data_block + 1) * fs->cfg->geom.block_size -
+                          fs->cfg->geom.page_size +
+                          chunk_idx * ECC_BCH_DATA_ECCLEN;
+
+        ret = fs->cfg->flash_read(fs, ecc_addr, ECC_BCH_DATA_ECCLEN, ecc_buf);
+        RETURN_ON_ERR(ret);
+
+        uint32_t err_loc[fs->data_bch->t];
+        memset(err_loc, 0, sizeof(err_loc));
+
+        int dec_ret = decode_bch(fs->data_bch, pg_buf, sizeof(pg_buf), ecc_buf,
+                                 NULL, NULL, err_loc);
+        if (dec_ret < 0) {
+            R2F2_LOG_ERR("data bch decode error %d", dec_ret);
+            return RET_ECC_ERR;
+        }
+
+        for (int i = 0; i < dec_ret; i++) {
+            uint32_t loc = err_loc[i];
+            if (loc >= 8 * fs->cfg->geom.page_size) {
+                /* error in ecc, can be ignored */
+                continue;
+            }
+            pg_buf[loc / 8] ^= (1 << (loc % 8));
+        }
+
+        memcpy(dst + read, pg_buf, to_read);
+
+        /* FIXME: what if this is a padded chunk, how do we know the actual
+         * length? maybe this needs a length header after all */
+        read += to_read;
+        chunk_idx++;
+    }
+
+    return RET_OK;
+}
+#else
+r2f2_ret r2f2_read_data(r2f2_fs_t *fs, block_idx data_block, size_t off,
+                        size_t len, uint8_t *dst) {
+    size_t read = 0;
+
+    size_t data_addr = data_block * fs->cfg->geom.block_size + off;
+
+    while (read < len) {
+        size_t to_read = MIN(len - read, fs->cfg->geom.page_size);
+        size_t read_pos = data_addr + read;
+        r2f2_ret ret = fs->cfg->flash_read(fs, read_pos, to_read, dst + read);
+        RETURN_ON_ERR(ret);
+        read += to_read;
+    }
+    return RET_OK;
+}
+#endif
+
 RESULT(uint32_t) get_unused_next_ptr_idx(r2f2_fs_t *fs,
                                          flash_block_idx *indices) {
     if (!indices) {
@@ -487,10 +638,12 @@ RESULT(uint32_t) get_last_file_seq_entry(r2f2_fs_t *fs,
     }
 }
 
-RESULT(block_idx) find_data_block_for_off(r2f2_fs_t *fs,
-                                          block_idx file_indir_block_idx,
-                                          size_t off) {
+r2f2_ret find_data_block_for_off(r2f2_fs_t *fs, block_idx file_indir_block_idx,
+                                 size_t off, struct db_ret *db_ret) {
     /*
+     * NOTE: with ECC_ON_DATA, 4096 becomes 4096-256 due to the smaller data
+     * blocks, in which the last page is reserved for ECC
+     *
      * For sequential writes, each subsequent 4096B are one data block aka
      * seq_entry further, so 128*4096B is one seq_block aka one indir_entry
      * further.
@@ -500,11 +653,18 @@ RESULT(block_idx) find_data_block_for_off(r2f2_fs_t *fs,
      * expected entries.
      */
 
+#ifdef ECC_ON_DATA
+    size_t data_block_capacity =
+        fs->cfg->geom.block_size - fs->cfg->geom.page_size;
+#else
+    size_t data_block_capacity = fs->cfg->geom.block_size;
+#endif
+
     size_t expected_indir_entry =
-        off / (fs->cfg->geom.block_size * (NUM_FILE_SEQ_ENTRIES));
+        off / (data_block_capacity * (NUM_FILE_SEQ_ENTRIES));
     size_t expected_seq_entry =
-        (off % (fs->cfg->geom.block_size * (NUM_FILE_SEQ_ENTRIES))) /
-        fs->cfg->geom.block_size;
+        (off % (data_block_capacity * (NUM_FILE_SEQ_ENTRIES))) /
+        data_block_capacity;
 
     size_t start_from_indir_entry = expected_indir_entry;
     size_t start_from_seq_entry = expected_seq_entry;
@@ -514,39 +674,29 @@ RESULT(block_idx) find_data_block_for_off(r2f2_fs_t *fs,
         memset(&fie_flags, 0xFF, sizeof(entry_flags_t));
         r2f2_ret ret = read_file_indir_entry_flags(fs, file_indir_block_idx, i,
                                                    &fie_flags);
-        if (ret != RET_OK) {
-            return RESULT_ERR(block_idx, ret);
-        }
+        RETURN_ON_ERR(ret);
         if (is_entry_used(fie_flags) == ENTRY_FLAG_SET &&
             is_entry_committed(fie_flags) == ENTRY_FLAG_SET) {
             file_indir_entry_t fie;
             ret = read_file_indir_entry(fs, file_indir_block_idx, i, &fie);
-            if (ret != RET_OK) {
-                return RESULT_ERR(block_idx, ret);
-            }
+            RETURN_ON_ERR(ret);
             /* check the expected and subsequent indir entries */
             for (size_t j = start_from_seq_entry; j < NUM_FILE_SEQ_ENTRIES;
                  j++) {
                 flash_block_idx next[NUM_NEXT_PTRS];
                 memcpy(next, fie.seq_block, sizeof(next));
                 RESULT(block_idx) seq_block = get_valid_next_block(fs, next);
-                if (seq_block.code != RET_OK) {
-                    return RESULT_ERR(block_idx, seq_block.code);
-                }
+                RETURN_ON_ERR(seq_block.code);
                 entry_flags_t fse_flags;
                 memset(&fse_flags, 0xFF, sizeof(entry_flags_t));
                 ret = read_file_seq_entry_flags(fs, seq_block.value, j,
                                                 &fse_flags);
-                if (ret != RET_OK) {
-                    return RESULT_ERR(block_idx, ret);
-                }
+                RETURN_ON_ERR(ret);
                 if (is_entry_used(fse_flags) == ENTRY_FLAG_SET &&
                     is_entry_committed(fse_flags) == ENTRY_FLAG_SET) {
                     file_seq_entry_t fse;
                     ret = read_file_seq_entry(fs, seq_block.value, j, &fse);
-                    if (ret != RET_OK) {
-                        return RESULT_ERR(block_idx, ret);
-                    }
+                    RETURN_ON_ERR(ret);
                     /* R2F2_LOG_DEBUG( */
                     /*     "looking for offset %zu, block covers range %u -
                      * %u",
@@ -556,16 +706,19 @@ RESULT(block_idx) find_data_block_for_off(r2f2_fs_t *fs,
                     /*         fse.data_block_fill_level); */
                     RESULT(uint32_t) fse_off =
                         GET_FLASH_U32(fse.data_block_offset_in_file);
-                    RETURN_ON_ERR_AS(block_idx, fse_off);
+                    RETURN_ON_ERR(fse_off.code);
                     RESULT(uint32_t) fse_fill =
                         GET_FLASH_U32(fse.data_block_fill_level);
-                    RETURN_ON_ERR_AS(block_idx, fse_fill);
+                    RETURN_ON_ERR(fse_fill.code);
                     if (fse_off.value == off ||
                         (fse_off.value <= off &&
-                         fse_off.value + fse_fill.value >= off)) {
+                         fse_off.value + fse_fill.value > off)) {
                         RESULT(block_idx) data_block =
                             GET_FLASH_BLOCK_IDX(fse.data_block);
-                        return data_block;
+                        RETURN_ON_ERR(data_block.code);
+                        db_ret->data_block_idx = data_block.value;
+                        db_ret->data_block_offset_in_file = fse_off.value;
+                        return RET_OK;
                     }
                 }
             }
@@ -582,15 +735,22 @@ RESULT(block_idx) find_data_block_for_off(r2f2_fs_t *fs,
                  "correct, and "
                  "could not find correct entries",
                  expected_indir_entry, expected_seq_entry);
-    return RESULT_ERR(block_idx, RET_NOT_FOUND);
+    return RET_NOT_FOUND;
 }
 
-RESULT(block_idx) find_data_block_for_off_direct(r2f2_fs_t *fs,
-                                                 block_idx file_seq_block_idx,
-                                                 size_t off) {
+r2f2_ret find_data_block_for_off_direct(r2f2_fs_t *fs,
+                                        block_idx file_seq_block_idx,
+                                        size_t off, struct db_ret *db_ret) {
+#ifdef ECC_ON_DATA
+    size_t data_block_capacity =
+        fs->cfg->geom.block_size - fs->cfg->geom.page_size;
+#else
+    size_t data_block_capacity = fs->cfg->geom.block_size;
+#endif
+
     size_t expected_seq_entry =
-        (off % (fs->cfg->geom.block_size * (NUM_FILE_SEQ_ENTRIES))) /
-        fs->cfg->geom.block_size;
+        (off % (data_block_capacity * (NUM_FILE_SEQ_ENTRIES))) /
+        data_block_capacity;
 
     size_t start_from_seq_entry = expected_seq_entry;
     for (size_t j = start_from_seq_entry; j < NUM_FILE_SEQ_ENTRIES; j++) {
@@ -598,28 +758,27 @@ RESULT(block_idx) find_data_block_for_off_direct(r2f2_fs_t *fs,
         memset(&fse_flags, 0xFF, sizeof(entry_flags_t));
         r2f2_ret ret =
             read_file_seq_entry_flags(fs, file_seq_block_idx, j, &fse_flags);
-        if (ret != RET_OK) {
-            return RESULT_ERR(block_idx, ret);
-        }
+        RETURN_ON_ERR(ret);
         if (is_entry_used(fse_flags) == ENTRY_FLAG_SET &&
             is_entry_committed(fse_flags) == ENTRY_FLAG_SET) {
             file_seq_entry_t fse;
             ret = read_file_seq_entry(fs, file_seq_block_idx, j, &fse);
-            if (ret != RET_OK) {
-                return RESULT_ERR(block_idx, ret);
-            }
+            RETURN_ON_ERR(ret);
             RESULT(uint32_t) fse_off =
                 GET_FLASH_U32(fse.data_block_offset_in_file);
-            RETURN_ON_ERR_AS(block_idx, fse_off);
+            RETURN_ON_ERR(fse_off.code);
             RESULT(uint32_t) fse_fill =
                 GET_FLASH_U32(fse.data_block_fill_level);
-            RETURN_ON_ERR_AS(block_idx, fse_fill);
+            RETURN_ON_ERR(fse_fill.code);
             if (fse_off.value == off ||
                 (fse_off.value <= off &&
-                 fse_off.value + fse_fill.value >= off)) {
+                 fse_off.value + fse_fill.value > off)) {
                 RESULT(block_idx) data_block =
                     GET_FLASH_BLOCK_IDX(fse.data_block);
-                return data_block;
+                RETURN_ON_ERR(data_block.code);
+                db_ret->data_block_idx = data_block.value;
+                db_ret->data_block_offset_in_file = fse_off.value;
+                return RET_OK;
             }
         }
     }
@@ -627,7 +786,7 @@ RESULT(block_idx) find_data_block_for_off_direct(r2f2_fs_t *fs,
     R2F2_LOG_ERR("expected direct seq_entry %zu not correct, and could not "
                  "find correct entries",
                  expected_seq_entry);
-    return RESULT_ERR(block_idx, RET_NOT_FOUND);
+    return RET_NOT_FOUND;
 }
 
 r2f2_ret r2f2_get_dir_entry(r2f2_fs_t *fs, const char *path,

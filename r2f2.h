@@ -33,6 +33,9 @@ struct r2f2_fs {
     struct bch_control *u32_bch;
     struct bch_control *path_bch;
 #endif
+#ifdef ECC_ON_DATA
+    struct bch_control *data_bch;
+#endif
     fildes_t fds[MAX_NUM_FDS];
 };
 

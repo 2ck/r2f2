@@ -145,6 +145,13 @@ r2f2_ret write_block_header(r2f2_fs_t *fs, block_idx b, uint32_t type);
 
 RESULT(uint32_t) get_block_type(r2f2_fs_t *fs, block_idx b);
 
+r2f2_ret r2f2_write_data(r2f2_fs_t *fs, block_idx data_block,
+                         size_t data_block_fill, size_t data_len,
+                         uint8_t *data);
+
+r2f2_ret r2f2_read_data(r2f2_fs_t *fs, block_idx data_block, size_t off,
+                        size_t len, uint8_t *dst);
+
 /**
  * returns the value of the last valid next_block entry
  *
@@ -202,12 +209,16 @@ RESULT(uint32_t) get_last_file_indir_entry(r2f2_fs_t *fs,
 RESULT(uint32_t) get_last_file_seq_entry(r2f2_fs_t *fs,
                                          block_idx file_seq_block_idx);
 
-RESULT(block_idx) find_data_block_for_off(r2f2_fs_t *fs,
-                                          block_idx file_indir_block_idx,
-                                          size_t off);
-RESULT(block_idx) find_data_block_for_off_direct(r2f2_fs_t *fs,
-                                                 block_idx file_seq_block_idx,
-                                                 size_t off);
+struct db_ret {
+    block_idx data_block_idx;
+    size_t data_block_offset_in_file;
+};
+
+r2f2_ret find_data_block_for_off(r2f2_fs_t *fs, block_idx file_indir_block_idx,
+                                 size_t off, struct db_ret *db_ret);
+r2f2_ret find_data_block_for_off_direct(r2f2_fs_t *fs,
+                                        block_idx file_seq_block_idx,
+                                        size_t off, struct db_ret *db_ret);
 
 struct dir_traversal_ret {
     block_idx dmb_idx;

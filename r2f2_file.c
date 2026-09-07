@@ -398,6 +398,7 @@ RESULT(r2f2_fd) r2f2_register_file(r2f2_fs_t *fs, const char *path) {
     /* no data block so far */
     f->meta.data.last_block = 0;
     f->meta.data.last_block_fill = 0;
+    f->meta.data.last_block_offset_in_file = 0;
 
     return fd;
 }
@@ -415,7 +416,12 @@ RESULT(r2f2_fd) r2f2_create_fd(r2f2_fs_t *fs, const char *path) {
         memset(fs->fds[i].path, 0, MAX_PATH_LEN);
         memcpy(fs->fds[i].path, path, len);
 
+#ifdef ECC_ON_DATA
+        void *mem =
+            R2F2_MALLOC(fs->cfg->geom.block_size - fs->cfg->geom.page_size);
+#else
         void *mem = R2F2_MALLOC(fs->cfg->geom.block_size);
+#endif
         R2F2_ASSERT(mem, !=, NULL, "%p");
 
         fs->fds[i].block_buffer.data = mem;
