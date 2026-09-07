@@ -57,9 +57,12 @@ r2f2_ret r2f2_mount(r2f2_fs_t *fs) {
                 "%zu");
 
 #ifdef ECC_ON_METADATA
-    fs->bch = init_bch(ECC_BCH_M, ECC_BCH_T, 0);
-    R2F2_ASSERT((void *)fs->bch, !=, NULL, "%p");
-    R2F2_ASSERT(fs->bch->ecc_bytes, ==, ECC_BCH_LEN, "%u");
+    fs->u32_bch = init_bch(ECC_BCH_U32_M, ECC_BCH_U32_T, 0);
+    R2F2_ASSERT((void *)fs->u32_bch, !=, NULL, "%p");
+    R2F2_ASSERT(fs->u32_bch->ecc_bytes, ==, ECC_BCH_U32_ECCLEN, "%u");
+    fs->path_bch = init_bch(ECC_BCH_PATH_M, ECC_BCH_PATH_T, 0);
+    R2F2_ASSERT((void *)fs->path_bch, !=, NULL, "%p");
+    R2F2_ASSERT(fs->path_bch->ecc_bytes, ==, ECC_BCH_PATH_ECCLEN, "%u");
 #endif
 
     r2f2_fs_info_t fs_info;
@@ -106,7 +109,8 @@ r2f2_ret r2f2_unmount(r2f2_fs_t *fs) {
     }
 
 #ifdef ECC_ON_METADATA
-    free_bch(fs->bch);
+    free_bch(fs->u32_bch);
+    free_bch(fs->path_bch);
 #endif
 
     return any_ret;
@@ -306,6 +310,11 @@ r2f2_ret r2f2_mkdir(r2f2_fs_t *fs, const char *path) {
 
         r2f2_ret ret = set_path_to_basename_zeroed(dme.path, path_copy);
         RETURN_ON_ERR(ret);
+#ifdef ECC_ON_METADATA
+        memset(dme.path_ecc, 0, ECC_BCH_PATH_ECCLEN);
+        encode_bch(fs->path_bch, (uint8_t *)dme.path, MAX_PATH_LEN,
+                   dme.path_ecc);
+#endif
 
         memset(dme.next_block, 0xFF, sizeof(dme.next_block));
         RESULT(block_idx) next_block = allocate_block(fs);

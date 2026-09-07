@@ -90,6 +90,9 @@ entry_flag_state_t is_entry_reclaimable(entry_flags_t f);
 
 typedef struct __attribute__((packed)) dir_meta_entry {
     char path[MAX_PATH_LEN];
+#ifdef ECC_ON_METADATA
+    uint8_t path_ecc[ECC_BCH_PATH_ECCLEN];
+#endif
     flash_block_idx next_block[NUM_NEXT_PTRS];
 } dir_meta_entry_t;
 
@@ -107,8 +110,6 @@ typedef struct __attribute__((packed)) file_indir_entry {
 
 typedef struct __attribute__((packed)) file_indir_block {
     block_header_t header;
-
-    char path[MAX_PATH_LEN];
 
     entry_flags_t f[NUM_FILE_INDIR_ENTRIES];
 

@@ -30,7 +30,8 @@ struct r2f2_fs {
     r2f2_cfg_t *cfg;
     block_idx root_dir_block;
 #ifdef ECC_ON_METADATA
-    struct bch_control *bch;
+    struct bch_control *u32_bch;
+    struct bch_control *path_bch;
 #endif
     fildes_t fds[MAX_NUM_FDS];
 };

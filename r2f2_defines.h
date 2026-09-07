@@ -29,11 +29,15 @@ RESULT_DECL_TRIVIAL(r2f2_fd);
 
 #ifdef ECC_ON_METADATA
 #  include "bch.h"
-#  define ECC_BCH_M 6
-#  define ECC_BCH_T 4
-#  define ECC_BCH_LEN 3
+#  define ECC_BCH_U32_M 6
+#  define ECC_BCH_U32_T 4
+#  define ECC_BCH_U32_ECCLEN 3
 
-#  define MAX_PATH_LEN (110U)
+#  define ECC_BCH_PATH_M 10
+#  define ECC_BCH_PATH_T 12
+#  define ECC_BCH_PATH_ECCLEN 15
+
+#  define MAX_PATH_LEN (95U)
 
 #  define NUM_DIR_META_ENTRIES (31U)
 #  define NUM_FILE_INDIR_ENTRIES (246U)
@@ -47,19 +51,19 @@ RESULT_DECL_TRIVIAL(r2f2_fd);
 
 typedef struct __attribute__((packed)) flash_u32_t {
     uint8_t data[4];
-    uint8_t ecc[ECC_BCH_LEN];
+    uint8_t ecc[ECC_BCH_U32_ECCLEN];
 } flash_u32;
 
 RESULT(uint32_t) get_flash_u32(struct bch_control *bch, flash_u32 u);
-#  define GET_FLASH_U32(u) get_flash_u32(fs->bch, u)
+#  define GET_FLASH_U32(u) get_flash_u32(fs->u32_bch, u)
 
 #  define SET_FLASH_U32(u, val)                                                \
       do {                                                                     \
-          R2F2_ASSERT((void *)fs->bch, !=, NULL, "%p");                        \
+          R2F2_ASSERT((void *)fs->u32_bch, !=, NULL, "%p");                    \
           uint32_t _v = (uint32_t)val;                                         \
           memset(&u, 0, sizeof(flash_u32));                                    \
           memcpy(u.data, &_v, sizeof(u.data));                                 \
-          encode_bch(fs->bch, u.data, sizeof(u.data), u.ecc);                  \
+          encode_bch(fs->u32_bch, u.data, sizeof(u.data), u.ecc);              \
       } while (0)
 
 typedef flash_u32 flash_block_idx;
