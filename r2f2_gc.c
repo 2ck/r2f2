@@ -151,7 +151,9 @@ uint32_t r2f2_reclaim_file_blocks(r2f2_fs_t *fs, dir_meta_entry_t *dme) {
         } else if (block_type.value == BLOCK_TYPE_SEQ) {
             freed += r2f2_reclaim_seq_block(fs, next_block.value);
         } else {
-            R2F2_LOG_ERR("unexpected dir_block in gc");
+            R2F2_LOG_ERR("unexpected block type 0x%x in gc for block %u",
+                         block_type.value, next_block.value);
+            dump_fs_dot(fs, "wrongblockheader.dot");
         }
 
         free_block(fs, next_block.value);
@@ -263,9 +265,7 @@ r2f2_ret r2f2_migrate_root_dir_block(r2f2_fs_t *fs) {
 
         /* write valid entry to write index in new block */
         ret = write_dir_meta_entry(fs, b.value, i_w, &dme);
-        if (ret != RET_OK) {
-            return ret;
-        }
+        RETURN_ON_ERR(ret);
         i_w++;
     }
 
@@ -349,14 +349,67 @@ r2f2_ret r2f2_migrate_dir_block_in_entry(r2f2_fs_t *fs, block_idx dir_block,
     memcpy(next, dme.next_block, sizeof(next));
     RESULT(uint32_t) free_next_ptr = get_unused_next_ptr_idx(fs, next);
     if (free_next_ptr.code == RET_NOMEM) {
-        /* parent dir_entry has no more space, we need a new one. TODO */
-        R2F2_LOG_WARN("unhandled (TODO): migrating dir_block but need new "
-                      "entry in parent");
-        return free_next_ptr.code;
-    } else {
+        /* parent dir_entry has no more space, we need a new one */
+        RESULT(uint32_t) new_parent_dme =
+            get_free_dir_meta_entry(fs, parent_block);
+        if (new_parent_dme.code == RET_NOMEM) {
+            R2F2_LOG_INFO("parent dir_block %u out of space", parent_block);
+            if (parent_block == fs->root_dir_block) {
+                R2F2_LOG_INFO("trying to migrate root dir block");
+                r2f2_ret ret = r2f2_migrate_root_dir_block(fs);
+                if (ret != RET_OK) {
+                    R2F2_LOG_ERR("error (%d) migrating root_dir_block", ret);
+                    return ret;
+                }
+                R2F2_LOG_INFO("migrated root block from %u to %u", parent_block,
+                              fs->root_dir_block);
+                abort();
+                parent_block = fs->root_dir_block;
+            } else {
+                R2F2_LOG_INFO("fs root dir block is %u", fs->root_dir_block);
+                abort();
+                /* aaand we need a whole new parent dme block, but we can't
+                 * allocate in our gc */
+                return RET_NOMEM;
+            }
+
+            /* RESULT(block_idx) new_dir_meta_block = */
+            /*     r2f2_create_next_dir_meta_block(fs, parent_block); */
+            /* RETURN_ON_ERR(new_dir_meta_block.code); */
+            /* parent_block = new_dir_meta_block.value; */
+            /* new_parent_dme.value = 0; */
+        } else if (new_parent_dme.code != RET_OK) {
+            return new_parent_dme.code;
+        }
+
+        entry_flags_t flags;
+        memset(&flags, 0xFF, sizeof(entry_flags_t));
+        flags = mark_entry_used(flags);
+        ret = write_dir_meta_entry_flags(fs, parent_block, new_parent_dme.value,
+                                         &flags);
+
+        memset(dme.next_block, 0xFF, sizeof(dme.next_block));
+        /* set that one's next_ptr */
+        SET_FLASH_BLOCK_IDX(dme.next_block[0], dir_next.value);
+        ret =
+            write_dir_meta_entry(fs, parent_block, new_parent_dme.value, &dme);
+        RETURN_ON_ERR(ret);
+
+        /* commit the new one */
+        flags = mark_entry_committed(flags);
+        ret = write_dir_meta_entry_flags(fs, parent_block, new_parent_dme.value,
+                                         &flags);
+
+        /* invalidate the old entry */
+        dir_meta_entry_t zero_dme;
+        memset(&zero_dme, 0, sizeof(dir_meta_entry_t));
+        ret = write_dir_meta_entry(fs, parent_block, parent_entry, &zero_dme);
+    } else if (free_next_ptr.code != RET_OK) {
         RETURN_ON_ERR(free_next_ptr.code);
     }
     SET_FLASH_BLOCK_IDX(dme.next_block[free_next_ptr.value], dir_next.value);
     ret = write_dir_meta_entry(fs, parent_block, parent_entry, &dme);
-    return ret;
+    RETURN_ON_ERR(ret);
+
+    return RET_OK;
 }

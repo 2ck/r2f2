@@ -64,6 +64,13 @@ RESULT(block_idx) r2f2_find_last_dir_meta_block(r2f2_fs_t *fs,
 RESULT(block_idx) r2f2_create_next_dir_meta_block(r2f2_fs_t *fs, block_idx dmb);
 
 /**
+ * allocates a new file_indir_block and sets the given block's next pointer
+ * accordingly
+ */
+RESULT(block_idx) r2f2_create_next_file_indir_block(r2f2_fs_t *fs,
+                                                    block_idx indir_block);
+
+/**
  * a file whose dir_meta_entry previously directly pointed to a file_seq_block
  * has now grown too large, so we insert a file_indir_block inbetween
  * updates the dir entry "in place" and updates the in-RAM fd contents

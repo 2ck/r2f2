@@ -99,8 +99,13 @@ typedef struct __attribute__((packed)) dir_meta_entry {
 typedef struct dir_meta_block {
     block_header_t header;
 
+#ifdef DOUBLE_METADATA
+    entry_flags_t f[2 * NUM_DIR_META_ENTRIES];
+    struct dir_meta_entry entries[2 * NUM_DIR_META_ENTRIES];
+#else
     entry_flags_t f[NUM_DIR_META_ENTRIES];
     struct dir_meta_entry entries[NUM_DIR_META_ENTRIES];
+#endif
     flash_block_idx next[NUM_NEXT_PTRS];
 } dir_meta_block_t;
 
@@ -111,9 +116,13 @@ typedef struct __attribute__((packed)) file_indir_entry {
 typedef struct __attribute__((packed)) file_indir_block {
     block_header_t header;
 
+#ifdef DOUBLE_METADATA
+    entry_flags_t f[2 * NUM_FILE_INDIR_ENTRIES];
+    struct file_indir_entry entries[2 * NUM_FILE_INDIR_ENTRIES];
+#else
     entry_flags_t f[NUM_FILE_INDIR_ENTRIES];
-
     struct file_indir_entry entries[NUM_FILE_INDIR_ENTRIES];
+#endif
 
     flash_block_idx next_block[NUM_NEXT_PTRS];
 
@@ -132,8 +141,13 @@ typedef struct __attribute__((packed)) file_seq_entry {
 typedef struct __attribute__((packed)) file_seq_block {
     block_header_t header;
 
+#ifdef DOUBLE_METADATA
+    entry_flags_t f[2 * NUM_FILE_SEQ_ENTRIES];
+    struct file_seq_entry entries[2 * NUM_FILE_SEQ_ENTRIES];
+#else
     entry_flags_t f[NUM_FILE_SEQ_ENTRIES];
     struct file_seq_entry entries[NUM_FILE_SEQ_ENTRIES];
+#endif
 } file_seq_block_t;
 
 #ifdef __cplusplus
@@ -202,6 +216,9 @@ RESULT(uint32_t) get_free_file_indir_entry(r2f2_fs_t *fs,
                                            block_idx file_indir_block_idx);
 RESULT(uint32_t) get_free_file_seq_entry(r2f2_fs_t *fs,
                                          block_idx file_seq_block_idx);
+
+RESULT(block_idx)
+find_last_indir_block_in_chain(r2f2_fs_t *fs, block_idx file_indir_block_idx);
 
 RESULT(uint32_t) get_last_file_indir_entry(r2f2_fs_t *fs,
                                            block_idx file_indir_block_idx);

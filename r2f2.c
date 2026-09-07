@@ -161,25 +161,24 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
         RETURN_ON_ERR(block_type.code);
         if (block_type.value == BLOCK_TYPE_INDIR) {
             indir_block_idx = next_block.value;
+            /* maybe our indir_block has next_block entries */
+            RESULT(block_idx) last_indir_block =
+                find_last_indir_block_in_chain(fs, next_block.value);
+            RETURN_ON_ERR(last_indir_block.code);
+
             RESULT(uint32_t) last_fie =
-                get_last_file_indir_entry(fs, indir_block_idx);
-            if (last_fie.code != RET_OK) {
-                return last_fie.code;
-            }
+                get_last_file_indir_entry(fs, last_indir_block.value);
+            RETURN_ON_ERR(last_fie.code);
 
             file_indir_entry_t fie;
-            r2f2_ret ret = read_file_indir_entry(fs, indir_block_idx,
+            r2f2_ret ret = read_file_indir_entry(fs, last_indir_block.value,
                                                  last_fie.value, &fie);
-            if (ret != RET_OK) {
-                return ret;
-            }
+            RETURN_ON_ERR(ret);
 
             flash_block_idx next[NUM_NEXT_PTRS];
             memcpy(next, fie.seq_block, sizeof(next));
             RESULT(block_idx) seq_block = get_valid_next_block(fs, next);
-            if (seq_block.code != RET_OK) {
-                return seq_block.code;
-            }
+            RETURN_ON_ERR(seq_block.code);
             seq_block_idx = seq_block.value;
         } else {
             seq_block_idx = next_block.value;
@@ -587,7 +586,13 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
 
             RESULT(uint32_t) new_indir_entry_num =
                 get_free_file_indir_entry(fs, f->meta.indir.block);
-            if (new_indir_entry_num.code != RET_OK) {
+            if (new_indir_entry_num.code == RET_NOMEM) {
+                RESULT(block_idx) new_file_indir_block =
+                    r2f2_create_next_file_indir_block(fs, f->meta.indir.block);
+                RETURN_ON_ERR(new_file_indir_block.code);
+                f->meta.indir.block = new_file_indir_block.value;
+                new_indir_entry_num.value = 0;
+            } else if (new_indir_entry_num.code != RET_OK) {
                 return new_indir_entry_num.code;
             }
 

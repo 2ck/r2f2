@@ -313,8 +313,17 @@ r2f2_ret write_dir_meta_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
         R2F2_LOG_ERR(
             "failed (%d) to write dir_meta_entry %u in block %u, buf %p", ret,
             idx, b, (void *)buf);
+        return ret;
     }
-    return ret;
+#ifdef DOUBLE_METADATA
+    ret = fs->cfg->flash_write(
+        fs,
+        b * fs->cfg->geom.block_size + offsetof(dir_meta_block_t, entries) +
+            (idx + NUM_DIR_META_ENTRIES) * sizeof(dir_meta_entry_t),
+        sizeof(dir_meta_entry_t), buf);
+    RETURN_ON_ERR(ret);
+#endif
+    return RET_OK;
 }
 r2f2_ret read_dir_meta_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
                                    entry_flags_t *buf) {
@@ -351,8 +360,17 @@ r2f2_ret write_dir_meta_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
         R2F2_LOG_ERR(
             "failed (%d) to write dir_meta_entry %u flags in block %u, buf %p",
             ret, idx, b, (void *)buf);
+        return ret;
     }
-    return ret;
+#ifdef DOUBLE_METADATA
+    ret = fs->cfg->flash_write(
+        fs,
+        b * fs->cfg->geom.block_size + offsetof(dir_meta_block_t, f) +
+            (idx + NUM_DIR_META_ENTRIES) * sizeof(entry_flags_t),
+        sizeof(entry_flags_t), buf);
+    RETURN_ON_ERR(ret);
+#endif
+    return RET_OK;
 }
 
 r2f2_ret read_file_indir_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
@@ -390,8 +408,17 @@ r2f2_ret write_file_indir_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
         R2F2_LOG_ERR(
             "failed (%d) to write file_indir_entry %u in block %u, buf %p", ret,
             idx, b, (void *)buf);
+        return ret;
     }
-    return ret;
+#ifdef DOUBLE_METADATA
+    ret = fs->cfg->flash_write(
+        fs,
+        b * fs->cfg->geom.block_size + offsetof(file_indir_block_t, entries) +
+            (idx + NUM_FILE_INDIR_ENTRIES) * sizeof(file_indir_entry_t),
+        sizeof(file_indir_entry_t), buf);
+    RETURN_ON_ERR(ret);
+#endif
+    return RET_OK;
 }
 r2f2_ret read_file_indir_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
                                      entry_flags_t *buf) {
@@ -428,8 +455,17 @@ r2f2_ret write_file_indir_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
         R2F2_LOG_ERR("failed (%d) to write file_indir_entry %u flags in block "
                      "%u, buf %p",
                      ret, idx, b, (void *)buf);
+        return ret;
     }
-    return ret;
+#ifdef DOUBLE_METADATA
+    ret = fs->cfg->flash_write(
+        fs,
+        b * fs->cfg->geom.block_size + offsetof(file_indir_block_t, f) +
+            (idx + NUM_FILE_INDIR_ENTRIES) * sizeof(entry_flags_t),
+        sizeof(entry_flags_t), buf);
+    RETURN_ON_ERR(ret);
+#endif
+    return RET_OK;
 }
 
 r2f2_ret read_file_seq_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
@@ -467,8 +503,17 @@ r2f2_ret write_file_seq_entry(r2f2_fs_t *fs, block_idx b, uint32_t idx,
         R2F2_LOG_ERR(
             "failed (%d) to write file_seq_entry %u in block %u, buf %p", ret,
             idx, b, (void *)buf);
+        return ret;
     }
-    return ret;
+#ifdef DOUBLE_METADATA
+    ret = fs->cfg->flash_write(
+        fs,
+        b * fs->cfg->geom.block_size + offsetof(file_seq_block_t, entries) +
+            (idx + NUM_FILE_SEQ_ENTRIES) * sizeof(file_seq_entry_t),
+        sizeof(file_seq_entry_t), buf);
+    RETURN_ON_ERR(ret);
+#endif
+    return RET_OK;
 }
 r2f2_ret read_file_seq_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
                                    entry_flags_t *buf) {
@@ -505,8 +550,17 @@ r2f2_ret write_file_seq_entry_flags(r2f2_fs_t *fs, block_idx b, uint32_t idx,
         R2F2_LOG_ERR(
             "failed (%d) to write file_seq_entry %u flags in block %u, buf %p",
             ret, idx, b, (void *)buf);
+        return ret;
     }
-    return ret;
+#ifdef DOUBLE_METADATA
+    ret = fs->cfg->flash_write(
+        fs,
+        b * fs->cfg->geom.block_size + offsetof(file_seq_block_t, f) +
+            (idx + NUM_FILE_SEQ_ENTRIES) * sizeof(entry_flags_t),
+        sizeof(entry_flags_t), buf);
+    RETURN_ON_ERR(ret);
+#endif
+    return RET_OK;
 }
 
 bool is_fs_valid(r2f2_fs_t *fs, r2f2_fs_info_t *fs_info) {
@@ -581,9 +635,36 @@ RESULT(uint32_t) get_free_file_seq_entry(r2f2_fs_t *fs,
     return RESULT_ERR(uint32_t, RET_NOMEM);
 }
 
+RESULT(block_idx)
+find_last_indir_block_in_chain(r2f2_fs_t *fs, block_idx file_indir_block_idx) {
+    block_idx indir_block = file_indir_block_idx;
+    bool has_next_block = true;
+    flash_block_idx next[NUM_NEXT_PTRS];
+    do {
+        r2f2_ret ret =
+            fs->cfg->flash_read(fs,
+                                indir_block * fs->cfg->geom.block_size +
+                                    offsetof(file_indir_block_t, next_block),
+                                sizeof(next), next);
+        if (ret != RET_OK) {
+            return RESULT_ERR(block_idx, ret);
+        }
+
+        RESULT(block_idx) next_block = get_valid_next_block(fs, next);
+        if (next_block.code == RET_OK) {
+            indir_block = next_block.value;
+        } else {
+            has_next_block = false;
+        }
+    } while (has_next_block);
+
+    return RESULT_OK(block_idx, indir_block);
+}
+
 RESULT(uint32_t) get_last_file_indir_entry(r2f2_fs_t *fs,
                                            block_idx file_indir_block_idx) {
     entry_flags_t f;
+
     uint32_t last_valid_entry = NUM_FILE_INDIR_ENTRIES;
     for (size_t i = 0; i < NUM_FILE_INDIR_ENTRIES; i++) {
         r2f2_ret ret =
@@ -669,72 +750,94 @@ r2f2_ret find_data_block_for_off(r2f2_fs_t *fs, block_idx file_indir_block_idx,
     size_t start_from_indir_entry = expected_indir_entry;
     size_t start_from_seq_entry = expected_seq_entry;
 
-    for (size_t i = start_from_indir_entry; i < NUM_FILE_INDIR_ENTRIES; i++) {
-        entry_flags_t fie_flags;
-        memset(&fie_flags, 0xFF, sizeof(entry_flags_t));
-        r2f2_ret ret = read_file_indir_entry_flags(fs, file_indir_block_idx, i,
-                                                   &fie_flags);
-        RETURN_ON_ERR(ret);
-        if (is_entry_used(fie_flags) == ENTRY_FLAG_SET &&
-            is_entry_committed(fie_flags) == ENTRY_FLAG_SET) {
-            file_indir_entry_t fie;
-            ret = read_file_indir_entry(fs, file_indir_block_idx, i, &fie);
+    bool has_next_block = true;
+    do {
+        for (size_t i = start_from_indir_entry; i < NUM_FILE_INDIR_ENTRIES;
+             i++) {
+            entry_flags_t fie_flags;
+            memset(&fie_flags, 0xFF, sizeof(entry_flags_t));
+            r2f2_ret ret = read_file_indir_entry_flags(fs, file_indir_block_idx,
+                                                       i, &fie_flags);
             RETURN_ON_ERR(ret);
-            /* check the expected and subsequent indir entries */
-            for (size_t j = start_from_seq_entry; j < NUM_FILE_SEQ_ENTRIES;
-                 j++) {
-                flash_block_idx next[NUM_NEXT_PTRS];
-                memcpy(next, fie.seq_block, sizeof(next));
-                RESULT(block_idx) seq_block = get_valid_next_block(fs, next);
-                RETURN_ON_ERR(seq_block.code);
-                entry_flags_t fse_flags;
-                memset(&fse_flags, 0xFF, sizeof(entry_flags_t));
-                ret = read_file_seq_entry_flags(fs, seq_block.value, j,
-                                                &fse_flags);
+            if (is_entry_used(fie_flags) == ENTRY_FLAG_SET &&
+                is_entry_committed(fie_flags) == ENTRY_FLAG_SET) {
+                file_indir_entry_t fie;
+                ret = read_file_indir_entry(fs, file_indir_block_idx, i, &fie);
                 RETURN_ON_ERR(ret);
-                if (is_entry_used(fse_flags) == ENTRY_FLAG_SET &&
-                    is_entry_committed(fse_flags) == ENTRY_FLAG_SET) {
-                    file_seq_entry_t fse;
-                    ret = read_file_seq_entry(fs, seq_block.value, j, &fse);
+                /* check the expected and subsequent indir entries */
+                for (size_t j = start_from_seq_entry; j < NUM_FILE_SEQ_ENTRIES;
+                     j++) {
+                    flash_block_idx next[NUM_NEXT_PTRS];
+                    memcpy(next, fie.seq_block, sizeof(next));
+                    RESULT(block_idx) seq_block =
+                        get_valid_next_block(fs, next);
+                    RETURN_ON_ERR(seq_block.code);
+                    entry_flags_t fse_flags;
+                    memset(&fse_flags, 0xFF, sizeof(entry_flags_t));
+                    ret = read_file_seq_entry_flags(fs, seq_block.value, j,
+                                                    &fse_flags);
                     RETURN_ON_ERR(ret);
-                    /* R2F2_LOG_DEBUG( */
-                    /*     "looking for offset %zu, block covers range %u -
-                     * %u",
-                     */
-                    /*     off, fse.data_block_offset_in_file, */
-                    /*     fse.data_block_offset_in_file + */
-                    /*         fse.data_block_fill_level); */
-                    RESULT(uint32_t) fse_off =
-                        GET_FLASH_U32(fse.data_block_offset_in_file);
-                    RETURN_ON_ERR(fse_off.code);
-                    RESULT(uint32_t) fse_fill =
-                        GET_FLASH_U32(fse.data_block_fill_level);
-                    RETURN_ON_ERR(fse_fill.code);
-                    if (fse_off.value == off ||
-                        (fse_off.value <= off &&
-                         fse_off.value + fse_fill.value > off)) {
-                        RESULT(block_idx) data_block =
-                            GET_FLASH_BLOCK_IDX(fse.data_block);
-                        RETURN_ON_ERR(data_block.code);
-                        db_ret->data_block_idx = data_block.value;
-                        db_ret->data_block_offset_in_file = fse_off.value;
-                        return RET_OK;
+                    if (is_entry_used(fse_flags) == ENTRY_FLAG_SET &&
+                        is_entry_committed(fse_flags) == ENTRY_FLAG_SET) {
+                        file_seq_entry_t fse;
+                        ret = read_file_seq_entry(fs, seq_block.value, j, &fse);
+                        RETURN_ON_ERR(ret);
+                        /* R2F2_LOG_DEBUG( */
+                        /*     "looking for offset %zu, block covers range %u -
+                         * %u",
+                         */
+                        /*     off, fse.data_block_offset_in_file, */
+                        /*     fse.data_block_offset_in_file + */
+                        /*         fse.data_block_fill_level); */
+                        RESULT(uint32_t) fse_off =
+                            GET_FLASH_U32(fse.data_block_offset_in_file);
+                        RETURN_ON_ERR(fse_off.code);
+                        RESULT(uint32_t) fse_fill =
+                            GET_FLASH_U32(fse.data_block_fill_level);
+                        RETURN_ON_ERR(fse_fill.code);
+                        if (fse_off.value == off ||
+                            (fse_off.value <= off &&
+                             fse_off.value + fse_fill.value > off)) {
+                            RESULT(block_idx) data_block =
+                                GET_FLASH_BLOCK_IDX(fse.data_block);
+                            RETURN_ON_ERR(data_block.code);
+                            db_ret->data_block_idx = data_block.value;
+                            db_ret->data_block_offset_in_file = fse_off.value;
+                            return RET_OK;
+                        }
                     }
                 }
             }
+            /*
+             * after the first seq_block, we search the next one starting from
+             * entry 0, because the expected entry was only valid for the
+             * previous block
+             */
+            start_from_seq_entry = 0;
         }
-        /*
-         * after the first seq_block, we search the next one starting from
-         * entry 0, because the expected entry was only valid for the
-         * previous block
-         */
-        start_from_seq_entry = 0;
-    }
+        flash_block_idx next[NUM_NEXT_PTRS];
+        r2f2_ret ret = fs->cfg->flash_read(
+            fs,
+            file_indir_block_idx * fs->cfg->geom.block_size +
+                offsetof(file_indir_block_t, next_block),
+            sizeof(next), next);
+        RETURN_ON_ERR(ret);
+
+        RESULT(block_idx) next_block = get_valid_next_block(fs, next);
+        if (next_block.code == RET_OK) {
+            file_indir_block_idx = next_block.value;
+        } else {
+            has_next_block = false;
+        }
+        /* continue searching at the expected offset in our next_block */
+        start_from_indir_entry = expected_indir_entry - NUM_FILE_INDIR_ENTRIES;
+    } while (has_next_block);
 
     R2F2_LOG_ERR("expected indir_entry %zu or expected seq_entry %zu not "
                  "correct, and "
                  "could not find correct entries",
                  expected_indir_entry, expected_seq_entry);
+    R2F2_LOG_INFO("off %zu, data cap %zu", off, data_block_capacity);
     return RET_NOT_FOUND;
 }
 
@@ -804,8 +907,8 @@ r2f2_ret r2f2_get_dir_entry(r2f2_fs_t *fs, const char *path,
     RETURN_ON_ERR(path_ret);
 
     /*
-     * optionally iterate through the next block pointers until we find one with
-     * a matching entry
+     * optionally iterate through the next block pointers until we find one
+     * with a matching entry
      */
     bool has_next_block = true;
     block_idx dmb = dmb_ret.value;
@@ -827,8 +930,8 @@ r2f2_ret r2f2_get_dir_entry(r2f2_fs_t *fs, const char *path,
                 continue;
             }
             /*
-             * the file/dir in this entry is unlinked/removed, but it may have
-             * been recreated, so keep on searching
+             * the file/dir in this entry is unlinked/removed, but it may
+             * have been recreated, so keep on searching
              */
             if (is_entry_reclaimable(flags) == ENTRY_FLAG_SET) {
                 continue;

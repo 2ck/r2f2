@@ -225,6 +225,51 @@ RESULT(block_idx) r2f2_create_next_dir_meta_block(r2f2_fs_t *fs,
     return new_block;
 }
 
+RESULT(block_idx) r2f2_create_next_file_indir_block(r2f2_fs_t *fs,
+                                                    block_idx indir_block) {
+    flash_block_idx next[NUM_NEXT_PTRS];
+
+    r2f2_ret ret =
+        fs->cfg->flash_read(fs,
+                            indir_block * fs->cfg->geom.block_size +
+                                offsetof(file_indir_block_t, next_block),
+                            sizeof(next), next);
+    if (ret != RET_OK) {
+        return RESULT_ERR(block_idx, ret);
+    }
+
+    /* verify that there is no entry yet */
+    RESULT(block_idx) next_block = get_valid_next_block(fs, next);
+    if (next_block.code == RET_OK) {
+        R2F2_LOG_ERR(
+            "asked to create next block for file_indir_block %u but it "
+            "already exists (%u)",
+            indir_block, next_block.value);
+        return RESULT_ERR(block_idx, RET_EINVAL);
+    }
+
+    RESULT(block_idx) new_block = allocate_block(fs);
+    if (new_block.code != RET_OK) {
+        return new_block;
+    }
+    ret = write_block_header(fs, new_block.value, BLOCK_TYPE_INDIR);
+    if (ret != RET_OK) {
+        return RESULT_ERR(block_idx, ret);
+    }
+
+    SET_FLASH_BLOCK_IDX(next[0], new_block.value);
+
+    ret = fs->cfg->flash_write(fs,
+                               indir_block * fs->cfg->geom.block_size +
+                                   offsetof(file_indir_block_t, next_block),
+                               sizeof(next), next);
+    if (ret != RET_OK) {
+        return RESULT_ERR(block_idx, ret);
+    }
+
+    return new_block;
+}
+
 r2f2_ret r2f2_migrate_file_to_indir_block(r2f2_fs_t *fs, r2f2_fd fd) {
     R2F2_FD_VALID_CHECK(fs, fd);
 

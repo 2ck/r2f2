@@ -39,9 +39,20 @@ RESULT_DECL_TRIVIAL(r2f2_fd);
 
 #  define MAX_PATH_LEN (95U)
 
-#  define NUM_DIR_META_ENTRIES (31U)
-#  define NUM_FILE_INDIR_ENTRIES (246U)
-#  define NUM_FILE_SEQ_ENTRIES (128U)
+/* TODO: actually read the second metadata entries if necessary */
+/* #  ifndef DOUBLE_METADATA */
+/* #    define DOUBLE_METADATA */
+/* #  endif */
+
+#  ifdef DOUBLE_METADATA
+#    define NUM_DIR_META_ENTRIES (15U)
+#    define NUM_FILE_INDIR_ENTRIES (123U)
+#    define NUM_FILE_SEQ_ENTRIES (64U)
+#  else
+#    define NUM_DIR_META_ENTRIES (31U)
+#    define NUM_FILE_INDIR_ENTRIES (246U)
+#    define NUM_FILE_SEQ_ENTRIES (128U)
+#  endif
 
 #  define MAX_NUM_FDS (32U)
 
