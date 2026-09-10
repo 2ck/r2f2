@@ -100,27 +100,10 @@ RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path) {
             read_dir_meta_entry(fs, current_block, i, &dme);
 
 #ifdef ECC_ON_METADATA
-            uint32_t path_err_loc[fs->path_bch->t];
-            memset(path_err_loc, 0, sizeof(path_err_loc));
-            int dec_ret =
-                decode_bch(fs->path_bch, (uint8_t *)dme.path, MAX_PATH_LEN,
-                           dme.path_ecc, NULL, NULL, path_err_loc);
-            if (dec_ret < 0) {
-                R2F2_LOG_ERR("path bch decode error %d", dec_ret);
-                return RESULT_ERR(block_idx, RET_ECC_ERR);
+            r2f2_ret ecc_ret = correct_path(fs, dme.path, dme.path_ecc);
+            if (ecc_ret != RET_OK) {
+                RESULT_ERR(block_idx, ecc_ret);
             }
-            /* TODO: log corrected errors somewhere */
-            /* TODO: write back correct value? */
-            for (int i = 0; i < dec_ret; i++) {
-                R2F2_LOG_INFO("correct error %d in dme path", i);
-                uint32_t loc = path_err_loc[i];
-                if (loc >= 8 * MAX_PATH_LEN) {
-                    /* error in ecc, can be ignored */
-                    continue;
-                }
-                dme.path[loc / 8] ^= (1 << (loc % 8));
-            }
-
 #endif
             bool match = memcmp(dme.path, segment, MAX_PATH_LEN) == 0;
             if (match) {

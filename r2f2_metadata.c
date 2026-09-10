@@ -943,6 +943,12 @@ r2f2_ret r2f2_get_dir_entry(r2f2_fs_t *fs, const char *path,
                 return read_ret;
             }
 
+#ifdef ECC_ON_METADATA
+            r2f2_ret ecc_ret = correct_path(fs, buf->path, buf->path_ecc);
+            if (ecc_ret != RET_OK) {
+                RESULT_ERR(block_idx, ecc_ret);
+            }
+#endif
             if (memcmp(buf->path, basename, MAX_PATH_LEN) == 0) {
                 ret->dme_idx = i;
                 ret->dme_flags = flags;

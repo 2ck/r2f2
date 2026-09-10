@@ -79,6 +79,8 @@ RESULT(uint32_t) get_flash_u32(struct bch_control *bch, flash_u32 u);
 
 typedef flash_u32 flash_block_idx;
 
+r2f2_ret correct_path(r2f2_fs_t *fs, char *path, void *path_ecc);
+
 #else
 
 #  define MAX_PATH_LEN (118U)

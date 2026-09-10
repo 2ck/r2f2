@@ -35,6 +35,17 @@ bool is_all_one(const void *buf, size_t size) {
     return true;
 }
 
+bool is_close_to_all_one(const void *buf, size_t size, unsigned max_flips) {
+    const uint8_t *p = buf;
+    unsigned zeros = 0;
+
+    for (size_t i = 0; i < size; i++) {
+        zeros += __builtin_popcount((unsigned)(uint8_t)~p[i]);
+    }
+
+    return zeros <= max_flips;
+}
+
 void r2f2_hexdump(const uint8_t *buf, size_t len) {
     size_t linenr = 0;
     const size_t breakafter = 32;
