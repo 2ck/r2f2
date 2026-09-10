@@ -13,10 +13,11 @@
 #endif
 
 typedef enum {
-    LOGLV_ERROR = 0,
-    LOGLV_WARN = 1,
-    LOGLV_INFO = 2,
-    LOGLV_DEBUG = 3
+    LOGLV_NONE = 0,
+    LOGLV_ERROR = 1,
+    LOGLV_WARN = 2,
+    LOGLV_INFO = 3,
+    LOGLV_DEBUG = 4
 } LogLevel;
 
 #define R2F2_LOG(lvl, fmt, ...)                                                \
