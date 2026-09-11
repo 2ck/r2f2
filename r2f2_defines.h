@@ -50,8 +50,8 @@ RESULT_DECL_TRIVIAL(r2f2_fd);
 #    define NUM_FILE_SEQ_ENTRIES (64U)
 #  else
 #    define NUM_DIR_META_ENTRIES (31U)
-#    define NUM_FILE_INDIR_ENTRIES (246U)
-#    define NUM_FILE_SEQ_ENTRIES (128U)
+#    define NUM_FILE_INDIR_ENTRIES (224U)
+#    define NUM_FILE_SEQ_ENTRIES (127U)
 #  endif
 
 #  define MAX_NUM_FDS (32U)

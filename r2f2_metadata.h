@@ -51,19 +51,19 @@ struct __attribute__((packed)) r2f2_superblock {
 #ifdef ECC_ON_METADATA
 
 /*
- * 15       12 11          8 7         4 3         0
+ * 31       24 23         16 15        8 7         0
  * +----------+-------------+-----------+-----------+
  * | *unused* | reclaimable |   used    |  commit   |
  * +----------+-------------+-----------+-----------+
  */
-typedef uint16_t entry_flags_t;
+typedef uint32_t entry_flags_t;
 #  define ENTRY_COMMIT_SHIFT 0U
-#  define ENTRY_USED_SHIFT 4U
-#  define ENTRY_RECLAIMABLE_SHIFT 8U
+#  define ENTRY_USED_SHIFT 8U
+#  define ENTRY_RECLAIMABLE_SHIFT 16U
 
-#  define ENTRY_COMMIT_MASK (0xFU << ENTRY_COMMIT_SHIFT)
-#  define ENTRY_USED_MASK (0xFU << ENTRY_USED_SHIFT)
-#  define ENTRY_RECLAIMABLE_MASK (0xFU << ENTRY_RECLAIMABLE_SHIFT)
+#  define ENTRY_COMMIT_MASK (0xFFU << ENTRY_COMMIT_SHIFT)
+#  define ENTRY_USED_MASK (0xFFU << ENTRY_USED_SHIFT)
+#  define ENTRY_RECLAIMABLE_MASK (0xFFU << ENTRY_RECLAIMABLE_SHIFT)
 
 #else
 
