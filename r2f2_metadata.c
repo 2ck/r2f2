@@ -145,23 +145,23 @@ r2f2_ret r2f2_read_data(r2f2_fs_t *fs, block_idx data_block, size_t off,
         ret = fs->cfg->flash_read(fs, ecc_addr, ECC_BCH_DATA_ECCLEN, ecc_buf);
         RETURN_ON_ERR(ret);
 
-        uint32_t err_loc[fs->data_bch->t];
+        uint32_t err_loc[ECC_BCH_DATA_T];
         memset(err_loc, 0, sizeof(err_loc));
 
         int dec_ret = decode_bch(fs->data_bch, pg_buf, sizeof(pg_buf), ecc_buf,
                                  NULL, NULL, err_loc);
         if (dec_ret < 0) {
             R2F2_LOG_ERR("data bch decode error %d", dec_ret);
-            return RET_ECC_ERR;
-        }
-
-        for (int i = 0; i < dec_ret; i++) {
-            uint32_t loc = err_loc[i];
-            if (loc >= 8 * fs->cfg->geom.page_size) {
-                /* error in ecc, can be ignored */
-                continue;
+            /* return RET_ECC_ERR; */
+        } else {
+            for (int i = 0; i < dec_ret; i++) {
+                uint32_t loc = err_loc[i];
+                if (loc >= 8 * fs->cfg->geom.page_size) {
+                    /* error in ecc, can be ignored */
+                    continue;
+                }
+                pg_buf[loc / 8] ^= (1 << (loc % 8));
             }
-            pg_buf[loc / 8] ^= (1 << (loc % 8));
         }
 
         memcpy(dst + read, pg_buf, to_read);
