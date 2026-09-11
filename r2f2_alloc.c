@@ -110,7 +110,10 @@ r2f2_ret restore_block_allocator(r2f2_fs_t *fs) {
         } else if (!is_all_zero(&entry, sizeof(alloc_block_entry_t))) {
             /* entry is neither 0 nor FF */
             RESULT(block_idx) b = GET_FLASH_BLOCK_IDX(entry.b);
-            RETURN_ON_ERR(b.code);
+            if (b.code != RET_OK) {
+                continue;
+            }
+            /* RETURN_ON_ERR(b.code); */
             if (b.value > 0 && b.value < fs->cfg->geom.num_blocks) {
                 if (_alloc_ptr == 0) {
                     _alloc_ptr = loc;
@@ -128,7 +131,10 @@ r2f2_ret restore_block_allocator(r2f2_fs_t *fs) {
              * something went wrong.
              */
             RESULT(block_idx) b = GET_FLASH_BLOCK_IDX(entry.b);
-            RETURN_ON_ERR(b.code);
+            if (b.code != RET_OK) {
+                continue;
+            }
+            /* RETURN_ON_ERR(b.code); */
             if (b.value != 0) {
                 return RET_ERR;
             }
