@@ -33,6 +33,7 @@ struct __attribute__((packed)) r2f2_fs_info {
     } global_metadata;
 
     flash_block_idx root_dir_block;
+    flash_block_idx root_dir_block_copy;
 };
 
 #define BLOCK_TYPE_DIR (0x00FFFFFFU)

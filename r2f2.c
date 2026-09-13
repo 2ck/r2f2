@@ -25,6 +25,7 @@ r2f2_ret r2f2_format(r2f2_fs_t *fs) {
     /* alternatively, make this have several next_block-pointers */
 
     SET_FLASH_BLOCK_IDX(fs_info.root_dir_block, b.value);
+    SET_FLASH_BLOCK_IDX(fs_info.root_dir_block_copy, b.value);
     fs->root_dir_block = b.value;
 
     ret = fs->cfg->flash_write(fs,
@@ -88,7 +89,10 @@ r2f2_ret r2f2_mount(r2f2_fs_t *fs) {
         r2f2_format(fs);
     } else {
         RESULT(block_idx) b = GET_FLASH_BLOCK_IDX(fs_info.root_dir_block);
-        RETURN_ON_ERR(b.code);
+        if (b.code != RET_OK) {
+            b = GET_FLASH_BLOCK_IDX(fs_info.root_dir_block_copy);
+            RETURN_ON_ERR(b.code);
+        }
         fs->root_dir_block = b.value;
         r2f2_ret ret = restore_block_allocator(fs);
         RETURN_ON_ERR(ret);
