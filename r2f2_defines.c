@@ -44,17 +44,18 @@ r2f2_ret correct_path(r2f2_fs_t *fs, char *path, void *path_ecc) {
     int dec_ret = decode_bch(fs->path_bch, (uint8_t *)path, MAX_PATH_LEN,
                              path_ecc, NULL, NULL, path_err_loc);
     if (dec_ret < 0) {
-        return RET_ECC_ERR;
-    }
-    /* TODO: log corrected errors somewhere */
-    /* TODO: write back correct value? */
-    for (int i = 0; i < dec_ret; i++) {
-        uint32_t loc = path_err_loc[i];
-        if (loc >= 8 * MAX_PATH_LEN) {
-            /* error in ecc, can be ignored */
-            continue;
+        //return RET_ECC_ERR;
+    } else {
+        /* TODO: log corrected errors somewhere */
+        /* TODO: write back correct value? */
+        for (int i = 0; i < dec_ret; i++) {
+            uint32_t loc = path_err_loc[i];
+            if (loc >= 8 * MAX_PATH_LEN) {
+                /* error in ecc, can be ignored */
+                continue;
+            }
+            path[loc / 8] ^= (1 << (loc % 8));
         }
-        path[loc / 8] ^= (1 << (loc % 8));
     }
     return RET_OK;
 }
