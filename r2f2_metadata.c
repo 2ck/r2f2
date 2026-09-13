@@ -254,7 +254,7 @@ static entry_flag_state_t entry_flag_state(entry_flags_t f,
                                            entry_flags_t mask) {
 #ifdef ECC_ON_METADATA
     uint32_t ones = __builtin_popcount((unsigned int)(f & mask));
-    if (ones <= 3) {
+    if (ones <= 4) {
         return ENTRY_FLAG_SET;
     } else if (ones >= 5) {
         return ENTRY_FLAG_UNSET;
