@@ -72,8 +72,8 @@ r2f2_ret r2f2_mount(r2f2_fs_t *fs) {
     R2F2_ASSERT(fs->data_bch->ecc_bytes, ==, ECC_BCH_DATA_ECCLEN, "%u");
     /* data is stored in n-1 page-sized chunks, with parity in the last chunk */
     size_t pages_per_block = fs->cfg->geom.block_size / fs->cfg->geom.page_size;
-    R2F2_ASSERT((pages_per_block - 1) * ECC_BCH_DATA_ECCLEN, <=,
-                fs->cfg->geom.page_size, "%zu");
+    R2F2_ASSERT((pages_per_block - ECC_BCH_DATA_RES_PG) * ECC_BCH_DATA_ECCLEN,
+                <=, ECC_BCH_DATA_RES_PG * fs->cfg->geom.page_size, "%zu");
 #endif
 
 #ifdef BCH_COUNTERS
@@ -472,8 +472,8 @@ ssize_t r2f2_write(r2f2_fs_t *fs, r2f2_fd fd, const void *buf, size_t count) {
      */
 
 #ifdef ECC_ON_DATA
-    size_t data_block_capacity =
-        fs->cfg->geom.block_size - fs->cfg->geom.page_size;
+    size_t data_block_capacity = fs->cfg->geom.block_size -
+                                 ECC_BCH_DATA_RES_PG * fs->cfg->geom.page_size;
 #else
     size_t data_block_capacity = fs->cfg->geom.block_size;
 #endif
@@ -531,7 +531,8 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
     while (total_written < total_to_write) {
 #ifdef ECC_ON_DATA
         size_t data_block_capacity =
-            fs->cfg->geom.block_size - fs->cfg->geom.page_size;
+            fs->cfg->geom.block_size -
+            ECC_BCH_DATA_RES_PG * fs->cfg->geom.page_size;
 #else
         size_t data_block_capacity = fs->cfg->geom.block_size;
 #endif

@@ -81,7 +81,7 @@ r2f2_ret r2f2_write_data(r2f2_fs_t *fs, block_idx data_block,
         RETURN_ON_ERR(ret);
 
         size_t ecc_addr = (data_block + 1) * fs->cfg->geom.block_size -
-                          fs->cfg->geom.page_size +
+                          ECC_BCH_DATA_RES_PG * fs->cfg->geom.page_size +
                           chunk_idx * ECC_BCH_DATA_ECCLEN;
         ret = fs->cfg->flash_write(fs, ecc_addr, ECC_BCH_DATA_ECCLEN, ecc_buf);
         RETURN_ON_ERR(ret);
@@ -123,7 +123,8 @@ r2f2_ret r2f2_read_data(r2f2_fs_t *fs, block_idx data_block, size_t off,
 
     while (read < len) {
         R2F2_ASSERT(chunk_idx, <,
-                    fs->cfg->geom.block_size / fs->cfg->geom.page_size - 1,
+                    fs->cfg->geom.block_size / fs->cfg->geom.page_size -
+                        ECC_BCH_DATA_RES_PG,
                     "%zu");
         size_t to_read = MIN(len - read, fs->cfg->geom.page_size);
 
@@ -140,7 +141,7 @@ r2f2_ret r2f2_read_data(r2f2_fs_t *fs, block_idx data_block, size_t off,
 
         uint8_t ecc_buf[ECC_BCH_DATA_ECCLEN];
         size_t ecc_addr = (data_block + 1) * fs->cfg->geom.block_size -
-                          fs->cfg->geom.page_size +
+                          ECC_BCH_DATA_RES_PG * fs->cfg->geom.page_size +
                           chunk_idx * ECC_BCH_DATA_ECCLEN;
 
         ret = fs->cfg->flash_read(fs, ecc_addr, ECC_BCH_DATA_ECCLEN, ecc_buf);
@@ -737,8 +738,8 @@ r2f2_ret find_data_block_for_off(r2f2_fs_t *fs, block_idx file_indir_block_idx,
      */
 
 #ifdef ECC_ON_DATA
-    size_t data_block_capacity =
-        fs->cfg->geom.block_size - fs->cfg->geom.page_size;
+    size_t data_block_capacity = fs->cfg->geom.block_size -
+                                 ECC_BCH_DATA_RES_PG * fs->cfg->geom.page_size;
 #else
     size_t data_block_capacity = fs->cfg->geom.block_size;
 #endif
@@ -847,8 +848,8 @@ r2f2_ret find_data_block_for_off_direct(r2f2_fs_t *fs,
                                         block_idx file_seq_block_idx,
                                         size_t off, struct db_ret *db_ret) {
 #ifdef ECC_ON_DATA
-    size_t data_block_capacity =
-        fs->cfg->geom.block_size - fs->cfg->geom.page_size;
+    size_t data_block_capacity = fs->cfg->geom.block_size -
+                                 ECC_BCH_DATA_RES_PG * fs->cfg->geom.page_size;
 #else
     size_t data_block_capacity = fs->cfg->geom.block_size;
 #endif

@@ -127,8 +127,9 @@ typedef block_idx flash_block_idx;
 
 #ifdef ECC_ON_DATA
 #  define ECC_BCH_DATA_M 12
-#  define ECC_BCH_DATA_T 8
-#  define ECC_BCH_DATA_ECCLEN 12
+#  define ECC_BCH_DATA_T 16
+#  define ECC_BCH_DATA_ECCLEN 24
+#  define ECC_BCH_DATA_RES_PG 2
 #endif
 
 /* bch operation counters */
