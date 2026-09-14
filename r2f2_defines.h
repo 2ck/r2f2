@@ -75,6 +75,7 @@ RESULT(uint32_t) get_flash_u32(struct bch_control *bch, flash_u32 u);
           memset(&u, 0, sizeof(flash_u32));                                    \
           memcpy(u.data, &_v, sizeof(u.data));                                 \
           encode_bch(fs->u32_bch, u.data, sizeof(u.data), u.ecc);              \
+          bch_counts[BCHC_U32_IDX].encodes++;                                  \
       } while (0)
 
 typedef flash_u32 flash_block_idx;
@@ -128,4 +129,33 @@ typedef block_idx flash_block_idx;
 #  define ECC_BCH_DATA_M 12
 #  define ECC_BCH_DATA_T 8
 #  define ECC_BCH_DATA_ECCLEN 12
+#endif
+
+/* bch operation counters */
+typedef struct bch_c {
+    size_t encodes;
+    size_t decodes;
+} bch_c_t;
+#ifdef ECC_ON_METADATA
+#  define BCHC_U32_IDX 0
+#  define BCHC_PATH_IDX 1
+
+#  ifdef ECC_ON_DATA
+#    define BCHC_DATA_IDX 2
+#    define BCHC_SIZE 3
+#  else
+#    define BCHC_SIZE 2
+#  endif
+
+extern bch_c_t bch_counts[BCHC_SIZE];
+
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+void reset_bch_counts(void);
+void print_bch_counts(void);
+#ifdef __cplusplus
+}
 #endif

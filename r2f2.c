@@ -76,6 +76,10 @@ r2f2_ret r2f2_mount(r2f2_fs_t *fs) {
                 fs->cfg->geom.page_size, "%zu");
 #endif
 
+#ifdef BCH_COUNTERS
+    reset_bch_counts();
+#endif
+
     r2f2_fs_info_t fs_info;
     /* read root block to see if there is logfs on flash */
     fs->cfg->flash_read(fs,
@@ -336,6 +340,7 @@ r2f2_ret r2f2_mkdir(r2f2_fs_t *fs, const char *path) {
         memset(dme.path_ecc, 0, ECC_BCH_PATH_ECCLEN);
         encode_bch(fs->path_bch, (uint8_t *)dme.path, MAX_PATH_LEN,
                    dme.path_ecc);
+        bch_counts[BCHC_PATH_IDX].encodes++;
 #endif
 
         memset(dme.next_block, 0xFF, sizeof(dme.next_block));

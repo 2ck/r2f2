@@ -71,6 +71,7 @@ r2f2_ret r2f2_write_data(r2f2_fs_t *fs, block_idx data_block,
         uint8_t ecc_buf[ECC_BCH_DATA_ECCLEN];
         memset(ecc_buf, 0, sizeof(ecc_buf));
         encode_bch(fs->data_bch, pg_buf, sizeof(pg_buf), ecc_buf);
+        bch_counts[BCHC_DATA_IDX].encodes++;
 
         size_t write_pos = data_block * fs->cfg->geom.block_size +
                            chunk_idx * fs->cfg->geom.page_size;
@@ -150,6 +151,7 @@ r2f2_ret r2f2_read_data(r2f2_fs_t *fs, block_idx data_block, size_t off,
 
         int dec_ret = decode_bch(fs->data_bch, pg_buf, sizeof(pg_buf), ecc_buf,
                                  NULL, NULL, err_loc);
+        bch_counts[BCHC_DATA_IDX].decodes++;
         if (dec_ret < 0) {
             R2F2_LOG_ERR("data bch decode error %d", dec_ret);
             /* return RET_ECC_ERR; */

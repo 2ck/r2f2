@@ -382,6 +382,7 @@ RESULT(r2f2_fd) r2f2_register_file(r2f2_fs_t *fs, const char *path) {
 #ifdef ECC_ON_METADATA
     memset(dme.path_ecc, 0, ECC_BCH_PATH_ECCLEN);
     encode_bch(fs->path_bch, (uint8_t *)dme.path, MAX_PATH_LEN, dme.path_ecc);
+    bch_counts[BCHC_PATH_IDX].encodes++;
 #endif
 
     memset(dme.next_block, 0xFF, sizeof(dme.next_block));
