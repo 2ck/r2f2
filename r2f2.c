@@ -389,7 +389,7 @@ off_t r2f2_lseek(r2f2_fs_t *fs, r2f2_fd fd, off_t offset, int whence) {
     } else if (whence == SEEK_CUR) {
         new_offset = f->file_offset + offset;
     } else if (whence == SEEK_END) {
-        new_offset = f->file_size + offset;
+        new_offset = f->file_size + f->block_buffer.count + offset;
     } else {
         return RET_EINVAL;
     }
