@@ -447,7 +447,7 @@ RESULT(r2f2_fd) r2f2_create_fd(r2f2_fs_t *fs, const char *path) {
 
 #ifdef ECC_ON_DATA
         void *mem = R2F2_MALLOC(fs->cfg->geom.block_size -
-                                ECC_BCH_DATA_RES_PG * fs->cfg->geom.page_size);
+                                ECC_BCH_DATA_RESV_PG * fs->cfg->geom.page_size);
 #else
         void *mem = R2F2_MALLOC(fs->cfg->geom.block_size);
 #endif
