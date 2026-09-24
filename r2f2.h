@@ -17,6 +17,8 @@ struct r2f2_cfg {
     /* must return RET_OK (0) on success */
     r2f2_ret (*flash_erase)(r2f2_fs_t *fs, uint32_t addr, uint32_t len);
 
+	r2f2_ret (*flash_chiperase)(r2f2_fs_t *fs);
+
     struct {
         uint32_t page_size;
         uint32_t block_size;

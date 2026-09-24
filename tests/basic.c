@@ -24,6 +24,11 @@ r2f2_ret flash_erase(r2f2_fs_t *fs, uint32_t addr, uint32_t len) {
     memset(dst, 0xFF, len);
     return RET_OK;
 }
+r2f2_ret flash_chiperase(r2f2_fs_t *fs) {
+    void *dst = (uint8_t *)fs->cfg->user_ctx;
+    memset(dst, 0xFF, FLASH_NUM_BLOCKS * FLASH_BLOCK_SIZE);
+    return RET_OK;
+}
 
 int main(int argc, char **argv) {
     (void)argc;
@@ -40,6 +45,7 @@ int main(int argc, char **argv) {
         .flash_read = flash_read,
         .flash_write = flash_write,
         .flash_erase = flash_erase,
+        .flash_chiperase = flash_chiperase,
         .geom =
             {
                 .page_size = FLASH_PAGE_SIZE,
