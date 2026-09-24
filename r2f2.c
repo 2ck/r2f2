@@ -9,7 +9,11 @@ r2f2_ret r2f2_format(r2f2_fs_t *fs) {
     r2f2_fs_info_t fs_info;
     memset(&fs_info, 0xFF, sizeof(r2f2_fs_info_t));
 
-    /* TODO: chip erase */
+    /* TODO: optionally replace with chip erase because that's much faster */
+    for (block_idx b = 0; b < fs->cfg->geom.num_blocks; b++) {
+        fs->cfg->flash_erase(fs, b * fs->cfg->geom.block_size,
+                             fs->cfg->geom.block_size);
+    }
 
     prepare_block_allocator(fs);
 
