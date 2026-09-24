@@ -97,6 +97,13 @@ RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path) {
                 break;
             }
 
+			if (is_entry_committed(flags) == ENTRY_FLAG_UNSET) {
+				continue;
+			}
+			if (is_entry_reclaimable(flags) == ENTRY_FLAG_UNSET) {
+				continue;
+			}
+
             read_dir_meta_entry(fs, current_block, i, &dme);
 
 #ifdef ECC_ON_METADATA

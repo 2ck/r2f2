@@ -675,9 +675,25 @@ r2f2_ret r2f2_remove(r2f2_fs_t *fs, const char *path) {
         return RET_EINVAL;
     }
 
+    size_t path_len = strlen(path);
+    if (path_len >= MAX_PATH_LEN) {
+        R2F2_LOG_ERR("path '%s' too long", path);
+        return RET_ERR;
+    }
+
+    /* trim trailing slash(es) in path */
+    char path_copy[MAX_PATH_LEN];
+    memset(path_copy, 0, MAX_PATH_LEN);
+    memcpy(path_copy, path, path_len);
+    char *end = path_copy + path_len;
+
+    while (end > path_copy && end[-1] == '/') {
+        *--end = '\0';
+    }
+
     dir_meta_entry_t dme;
     struct dir_traversal_ret dir_ret;
-    r2f2_ret ret = r2f2_get_dir_entry(fs, path, &dme, &dir_ret);
+    r2f2_ret ret = r2f2_get_dir_entry(fs, path_copy, &dme, &dir_ret);
     if (ret != RET_OK) {
         return ret;
     }
