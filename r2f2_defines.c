@@ -78,7 +78,7 @@ r2f2_ret correct_path(r2f2_fs_t *fs, char *path, void *path_ecc) {
                              path_ecc, NULL, NULL, path_err_loc);
     bch_counts[BCHC_PATH_IDX].decodes++;
     if (dec_ret < 0) {
-        //return RET_ECC_ERR;
+        return RET_ECC_ERR;
     } else {
         /* TODO: log corrected errors somewhere */
         /* TODO: write back correct value? */
