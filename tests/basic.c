@@ -192,6 +192,65 @@ int main(int argc, char **argv) {
         }
     }
 
+    /* write lots of data */
+    {
+        const char *filename = "/testfile";
+        for (size_t i = 0; i < 4 * FLASH_BLOCK_SIZE + 83; i++) {
+            uint8_t b = 97 + (i % 26);
+            /* if (i < 900) { */
+            /*     printf("file size=%lld\n", r2f2_lseek(&fs, fd, 0, SEEK_END));
+             */
+            /* } */
+            if (i == 517) {
+                int ret = r2f2_write(&fs, fd, write_buf, write_len);
+                if (ret != (int)write_len) {
+                    printf("R2F2 write '%s' to file '%s' failed (%d)\n",
+                           write_buf, filename, ret);
+                    return ret;
+                }
+            } else {
+                size_t write_len = 1;
+                int ret = r2f2_write(&fs, fd, &b, write_len);
+                if (ret != (int)write_len) {
+                    printf("R2F2 write '%c' to file '%s' failed (%d)\n", b,
+                           filename, ret);
+                    return ret;
+                }
+            }
+        }
+        int ret = r2f2_fsync(&fs, fd);
+        if (ret != RET_OK) {
+            printf("R2F2 fsync fd %d failed (%d)\n", fd, ret);
+            return ret;
+        }
+        const off_t seek_pos = 517 + 43;
+        ret = r2f2_lseek(&fs, fd, seek_pos, SEEK_SET);
+        if (ret != seek_pos) {
+            printf("R2F2 seek to position %lld in file '%s' failed (%d)",
+                   seek_pos, filename, ret);
+            return ret;
+        }
+        uint8_t read_buf[2 * FLASH_PAGE_SIZE + 13];
+        ret = r2f2_read(&fs, fd, read_buf, sizeof(read_buf));
+        if (ret != (ssize_t)sizeof(read_buf)) {
+            printf("R2F2 read %zu B from file '%s' failed (%d)\n",
+                   strlen(write_buf) + 1, filename, ret);
+            return ret;
+        }
+        r2f2_hexdump(read_buf, 64);
+    }
+
+    /* should succeed */
+    {
+        int ret = r2f2_close(&fs, fd);
+        if (ret != RET_OK) {
+            printf("R2F2 close fd %d failed (%d)\n", fd, ret);
+            return ret;
+        } else {
+            printf("R2F2 close fd %d okay\n", fd);
+        }
+    }
+
     dump_fs_dot(&fs, "tests-basic.dot");
 
     return 0;
