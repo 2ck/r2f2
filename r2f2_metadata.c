@@ -51,16 +51,8 @@ r2f2_ret r2f2_write_data(r2f2_fs_t *fs, block_idx data_block,
 
     size_t written = 0;
     size_t chunk_idx = data_block_fill / fs->cfg->geom.page_size;
-
     while (written < data_len) {
         size_t to_write = MIN(data_len - written, fs->cfg->geom.page_size);
-        /*
-         * FIXME: smaller writes will currently cause bugs when reading back
-         * later, because we have no way of knowing the actual data size later.
-         * That's why we assert here to avoid later bug searches.
-         * A fix would be to include a size header with each chunk.
-         */
-        R2F2_ASSERT(to_write, ==, fs->cfg->geom.page_size, "%zu");
 
         /* pad data to chunk size for ecc calculation */
         uint8_t pg_buf[fs->cfg->geom.page_size];
@@ -80,10 +72,22 @@ r2f2_ret r2f2_write_data(r2f2_fs_t *fs, block_idx data_block,
             fs->cfg->flash_write(fs, write_pos, to_write, data + written);
         RETURN_ON_ERR(ret);
 
+        /* last two pages of block contain ECC */
         size_t ecc_addr = (data_block + 1) * fs->cfg->geom.block_size -
                           ECC_BCH_DATA_RESV_PG * fs->cfg->geom.page_size +
                           chunk_idx * ECC_BCH_DATA_ECCLEN;
         ret = fs->cfg->flash_write(fs, ecc_addr, ECC_BCH_DATA_ECCLEN, ecc_buf);
+        RETURN_ON_ERR(ret);
+
+        /* last bytes of block contain data length for the respective chunk */
+        size_t num_chunks = fs->cfg->geom.block_size / fs->cfg->geom.page_size -
+                            ECC_BCH_DATA_RESV_PG;
+        const size_t BYTES_PER_CHUNKLEN = 2;
+        size_t len_addr = (data_block + 1) * fs->cfg->geom.block_size -
+                          (num_chunks - chunk_idx) * BYTES_PER_CHUNKLEN;
+        uint16_t chunk_len = (uint16_t)to_write;
+        ret =
+            fs->cfg->flash_write(fs, len_addr, BYTES_PER_CHUNKLEN, &chunk_len);
         RETURN_ON_ERR(ret);
 
         written += to_write;
@@ -115,18 +119,48 @@ r2f2_ret r2f2_write_data(r2f2_fs_t *fs, block_idx data_block,
 #ifdef ECC_ON_DATA
 r2f2_ret r2f2_read_data(r2f2_fs_t *fs, block_idx data_block, size_t off,
                         size_t len, uint8_t *dst) {
-    R2F2_ASSERT(off % fs->cfg->geom.page_size, ==, 0, "%zu");
-
     size_t read = 0;
 
-    size_t chunk_idx = off / fs->cfg->geom.page_size;
+    size_t chunk_idx = 0;
+    size_t off_in_chunk = 0;
+
+    const size_t BYTES_PER_CHUNKLEN = 2;
+    size_t num_chunks = fs->cfg->geom.block_size / fs->cfg->geom.page_size -
+                        ECC_BCH_DATA_RESV_PG;
+    /*
+     * We need to determine the chunk to read from based on the logical chunk
+     * sizes in case we wrote < chunk_size at some point.
+     */
+    uint16_t chunk_lens[num_chunks];
+    r2f2_ret ret =
+        fs->cfg->flash_read(fs,
+                            (data_block + 1) * fs->cfg->geom.block_size -
+                                (num_chunks * BYTES_PER_CHUNKLEN),
+                            sizeof(chunk_lens), chunk_lens);
+    RETURN_ON_ERR(ret);
+
+    size_t chunk_off = 0;
+    for (size_t i = 0; i < num_chunks; i++) {
+        if (chunk_off == off ||
+            (chunk_off <= off && chunk_off + chunk_lens[i] > off)) {
+            chunk_idx = i;
+            off_in_chunk = off - chunk_off;
+        }
+        chunk_off += chunk_lens[i];
+    }
 
     while (read < len) {
-        R2F2_ASSERT(chunk_idx, <,
-                    fs->cfg->geom.block_size / fs->cfg->geom.page_size -
-                        ECC_BCH_DATA_RESV_PG,
-                    "%zu");
-        size_t to_read = MIN(len - read, fs->cfg->geom.page_size);
+        R2F2_ASSERT(chunk_idx, <, num_chunks, "%zu");
+
+        uint16_t chunk_len;
+        size_t len_addr = (data_block + 1) * fs->cfg->geom.block_size -
+                          (num_chunks - chunk_idx) * BYTES_PER_CHUNKLEN;
+        r2f2_ret ret =
+            fs->cfg->flash_read(fs, len_addr, BYTES_PER_CHUNKLEN, &chunk_len);
+        RETURN_ON_ERR(ret);
+        R2F2_ASSERT(chunk_len, >, off_in_chunk, "%u");
+
+        size_t to_read = MIN(len - read, chunk_len - off_in_chunk);
 
         size_t read_pos = data_block * fs->cfg->geom.block_size +
                           chunk_idx * fs->cfg->geom.page_size;
@@ -135,7 +169,7 @@ r2f2_ret r2f2_read_data(r2f2_fs_t *fs, block_idx data_block, size_t off,
         memset(pg_buf, 0xFF, sizeof(pg_buf));
 
         /* read whole chunk */
-        r2f2_ret ret =
+        ret =
             fs->cfg->flash_read(fs, read_pos, fs->cfg->geom.page_size, pg_buf);
         RETURN_ON_ERR(ret);
 
@@ -167,12 +201,11 @@ r2f2_ret r2f2_read_data(r2f2_fs_t *fs, block_idx data_block, size_t off,
             }
         }
 
-        memcpy(dst + read, pg_buf, to_read);
+        memcpy(dst + read, pg_buf + off_in_chunk, to_read);
 
-        /* FIXME: what if this is a padded chunk, how do we know the actual
-         * length? maybe this needs a length header after all */
         read += to_read;
         chunk_idx++;
+        off_in_chunk = 0;
     }
 
     return RET_OK;
