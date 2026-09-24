@@ -91,6 +91,7 @@ r2f2_ret restore_block_allocator(r2f2_fs_t *fs) {
     _alloc_ptr = 0;
     _next_free_ptr = 0;
     uint32_t start_loc = _allocator_first_block * fs->cfg->geom.block_size;
+    _allocator_num_blocks = get_num_allocator_blocks(fs);
     uint32_t end_loc = (_allocator_first_block + _allocator_num_blocks) *
                            fs->cfg->geom.block_size -
                        sizeof(alloc_block_entry_t);
