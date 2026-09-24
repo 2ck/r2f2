@@ -460,6 +460,7 @@ ssize_t r2f2_read(r2f2_fs_t *fs, r2f2_fd fd, void *buf, size_t count) {
             f->file_offset - db_ret.data_block_offset_in_file, count, buf);
         RETURN_ON_ERR(ret);
 
+        f->file_offset += count;
         return count;
     } else {
         size_t to_read_from_fd_buf = count - can_read_from_storage;
