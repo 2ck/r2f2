@@ -53,7 +53,13 @@ int main(int argc, char **argv) {
     };
 
     {
-        int ret = r2f2_mount(&fs);
+        int ret = r2f2_format(&fs);
+        if (ret != RET_OK) {
+            printf("R2F2 format failed (%d)\n", ret);
+        } else {
+            printf("R2F2 format okay\n");
+        }
+        ret = r2f2_mount(&fs);
         if (ret != RET_OK) {
             printf("R2F2 mount failed (%d)\n", ret);
         } else {

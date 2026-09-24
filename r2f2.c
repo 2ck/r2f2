@@ -5,7 +5,55 @@
 #include "util/logger.h"
 #include <string.h>
 
+void prepare(r2f2_fs_t *fs) {
+    R2F2_ASSERT(fs->cfg->geom.block_size % fs->cfg->geom.page_size, ==, 0,
+                "%u");
+
+    /* data structure size checks */
+    R2F2_ASSERT(sizeof(struct r2f2_fs_info), <=, fs->cfg->geom.page_size,
+                "%zu");
+    R2F2_ASSERT(sizeof(struct r2f2_superblock), <=, fs->cfg->geom.block_size,
+                "%zu");
+    R2F2_ASSERT(sizeof(struct dir_meta_block), <=, fs->cfg->geom.block_size,
+                "%zu");
+    R2F2_ASSERT(sizeof(struct file_indir_block), <=, fs->cfg->geom.block_size,
+                "%zu");
+    R2F2_ASSERT(sizeof(struct file_seq_block), <=, fs->cfg->geom.block_size,
+                "%zu");
+
+#ifdef ECC_ON_METADATA
+    if (!fs->u32_bch) {
+        fs->u32_bch = init_bch(ECC_BCH_U32_M, ECC_BCH_U32_T, 0);
+        R2F2_ASSERT((void *)fs->u32_bch, !=, NULL, "%p");
+        R2F2_ASSERT(fs->u32_bch->ecc_bytes, ==, ECC_BCH_U32_ECCLEN, "%u");
+    }
+    if (!fs->path_bch) {
+        fs->path_bch = init_bch(ECC_BCH_PATH_M, ECC_BCH_PATH_T, 0);
+        R2F2_ASSERT((void *)fs->path_bch, !=, NULL, "%p");
+        R2F2_ASSERT(fs->path_bch->ecc_bytes, ==, ECC_BCH_PATH_ECCLEN, "%u");
+    }
+#endif
+
+#ifdef ECC_ON_DATA
+    if (!fs->data_bch) {
+        fs->data_bch = init_bch(ECC_BCH_DATA_M, ECC_BCH_DATA_T, 0);
+        R2F2_ASSERT((void *)fs->data_bch, !=, NULL, "%p");
+        R2F2_ASSERT(fs->data_bch->ecc_bytes, ==, ECC_BCH_DATA_ECCLEN, "%u");
+    }
+    /* data is stored in n-1 page-sized chunks, with parity in the last chunk */
+    size_t pages_per_block = fs->cfg->geom.block_size / fs->cfg->geom.page_size;
+    R2F2_ASSERT((pages_per_block - ECC_BCH_DATA_RESV_PG) * ECC_BCH_DATA_ECCLEN,
+                <=, ECC_BCH_DATA_RESV_PG * fs->cfg->geom.page_size, "%zu");
+#endif
+
+#ifdef BCH_COUNTERS
+    reset_bch_counts();
+#endif
+}
+
 r2f2_ret r2f2_format(r2f2_fs_t *fs) {
+    prepare(fs);
+
     r2f2_fs_info_t fs_info;
     memset(&fs_info, 0xFF, sizeof(r2f2_fs_info_t));
 
@@ -46,43 +94,7 @@ r2f2_ret r2f2_format(r2f2_fs_t *fs) {
 }
 
 r2f2_ret r2f2_mount(r2f2_fs_t *fs) {
-    R2F2_ASSERT(fs->cfg->geom.block_size % fs->cfg->geom.page_size, ==, 0,
-                "%u");
-
-    /* data structure size checks */
-    R2F2_ASSERT(sizeof(struct r2f2_fs_info), <=, fs->cfg->geom.page_size,
-                "%zu");
-    R2F2_ASSERT(sizeof(struct r2f2_superblock), <=, fs->cfg->geom.block_size,
-                "%zu");
-    R2F2_ASSERT(sizeof(struct dir_meta_block), <=, fs->cfg->geom.block_size,
-                "%zu");
-    R2F2_ASSERT(sizeof(struct file_indir_block), <=, fs->cfg->geom.block_size,
-                "%zu");
-    R2F2_ASSERT(sizeof(struct file_seq_block), <=, fs->cfg->geom.block_size,
-                "%zu");
-
-#ifdef ECC_ON_METADATA
-    fs->u32_bch = init_bch(ECC_BCH_U32_M, ECC_BCH_U32_T, 0);
-    R2F2_ASSERT((void *)fs->u32_bch, !=, NULL, "%p");
-    R2F2_ASSERT(fs->u32_bch->ecc_bytes, ==, ECC_BCH_U32_ECCLEN, "%u");
-    fs->path_bch = init_bch(ECC_BCH_PATH_M, ECC_BCH_PATH_T, 0);
-    R2F2_ASSERT((void *)fs->path_bch, !=, NULL, "%p");
-    R2F2_ASSERT(fs->path_bch->ecc_bytes, ==, ECC_BCH_PATH_ECCLEN, "%u");
-#endif
-
-#ifdef ECC_ON_DATA
-    fs->data_bch = init_bch(ECC_BCH_DATA_M, ECC_BCH_DATA_T, 0);
-    R2F2_ASSERT((void *)fs->data_bch, !=, NULL, "%p");
-    R2F2_ASSERT(fs->data_bch->ecc_bytes, ==, ECC_BCH_DATA_ECCLEN, "%u");
-    /* data is stored in n-1 page-sized chunks, with parity in the last chunk */
-    size_t pages_per_block = fs->cfg->geom.block_size / fs->cfg->geom.page_size;
-    R2F2_ASSERT((pages_per_block - ECC_BCH_DATA_RESV_PG) * ECC_BCH_DATA_ECCLEN,
-                <=, ECC_BCH_DATA_RESV_PG * fs->cfg->geom.page_size, "%zu");
-#endif
-
-#ifdef BCH_COUNTERS
-    reset_bch_counts();
-#endif
+    prepare(fs);
 
     r2f2_fs_info_t fs_info;
     /* read root block to see if there is logfs on flash */
@@ -93,8 +105,8 @@ r2f2_ret r2f2_mount(r2f2_fs_t *fs) {
 
     /* TODO: check if base block contents match cfg */
     if (!is_fs_valid(fs, &fs_info)) {
-        /* we need to format */
-        r2f2_format(fs);
+        R2F2_LOG_ERR("no valid file system found, format() necessary");
+        return RET_ERR;
     } else {
         RESULT(block_idx) b = GET_FLASH_BLOCK_IDX(fs_info.root_dir_block);
         if (b.code != RET_OK) {
