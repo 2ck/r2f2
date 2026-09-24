@@ -508,6 +508,7 @@ ssize_t r2f2_write(r2f2_fs_t *fs, r2f2_fd fd, const void *buf, size_t count) {
         memcpy(write_pos, src_pos, to_write);
 
         f->block_buffer.count += to_write;
+        f->file_offset += to_write;
         total_written += to_write;
     }
     return total_written;

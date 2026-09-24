@@ -146,7 +146,13 @@ int main(int argc, char **argv) {
         const char *filename = "/testfile";
         uint8_t read_buf[write_len];
         memset(read_buf, 0, sizeof(read_buf));
-        int ret = r2f2_read(&fs, fd, read_buf, write_len);
+        int ret = r2f2_lseek(&fs, fd, 0, SEEK_SET);
+        if (ret != 0) {
+            printf("R2F2 seek to position 0 in file '%s' failed (%d)", filename,
+                   ret);
+            return ret;
+        }
+        ret = r2f2_read(&fs, fd, read_buf, write_len);
         if (ret != (int)write_len) {
             printf("R2F2 read %zu B from file '%s' failed (%d)\n",
                    strlen(write_buf) + 1, filename, ret);
