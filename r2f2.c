@@ -824,6 +824,8 @@ r2f2_ret r2f2_readdir(r2f2_fs_t *fs, r2f2_dir_t *dir, r2f2_dirent_t *entry) {
 }
 
 r2f2_ret r2f2_closedir(r2f2_fs_t *fs, r2f2_dir_t *dir) {
+    (void)fs;
+    (void)dir;
     /* nop */
     return RET_OK;
 }
