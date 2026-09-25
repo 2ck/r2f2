@@ -263,6 +263,57 @@ int main(int argc, char **argv) {
         }
     }
 
+    /* { */
+    /*     const char *dirname = "/foobar/"; */
+    /*     int ret = r2f2_remove(&fs, dirname); */
+    /*     if (ret != RET_OK) { */
+    /*         printf("R2F2 remove dir '%s' failed (%d)\n", dirname, ret); */
+    /*     } else { */
+    /*         printf("R2F2 remove dir '%s' okay\n", dirname); */
+    /*     } */
+
+    /*     const char *filename = "/foobar/subdirfile"; */
+    /*     ret = r2f2_open(&fs, filename, O_RDWR); */
+    /*     if (ret >= 0) { */
+    /*         printf("R2F2 open file '%s' succeeded when it shouldn't have " */
+    /*                "(missing directory)\n", */
+    /*                filename); */
+    /*         return RET_ERR; */
+    /*     } else { */
+    /*         printf("R2F2 open file '%s' failed as it should\n", filename); */
+    /*     } */
+    /* } */
+
+    {
+        r2f2_dir_t dir;
+        const char *dirname = "/foobar/";
+        r2f2_ret ret = r2f2_opendir(&fs, dirname, &dir);
+        if (ret != RET_OK) {
+            printf("R2F2 open dir '%s' failed (%d)\n", dirname, ret);
+            return ret;
+        } else {
+            printf("R2F2 open dir '%s' okay\n", dirname);
+        }
+        r2f2_dirent_t entry;
+
+        while (ret = r2f2_readdir(&fs, &dir, &entry), ret != RET_OOB) {
+            if (ret != RET_OK) {
+                printf("R2F2 readdir failed (%d)\n", ret);
+                return ret;
+            } else {
+                printf("R2F2 readdir '%s': name '%s', type %s\n", dirname,
+                       entry.name, (entry.type == ENT_DIR) ? "dir" : "file");
+            }
+        }
+        ret = r2f2_closedir(&fs, &dir);
+        if (ret != RET_OK) {
+            printf("R2F2 close dir '%s' failed (%d)\n", dirname, ret);
+            return ret;
+        } else {
+            printf("R2F2 close dir '%s' okay\n", dirname);
+        }
+    }
+
     dump_fs_dot(&fs, "tests-basic.dot");
 
     return 0;

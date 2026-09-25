@@ -719,3 +719,111 @@ r2f2_ret r2f2_remove(r2f2_fs_t *fs, const char *path) {
                                      &new_f);
     return ret;
 }
+
+r2f2_ret r2f2_opendir(r2f2_fs_t *fs, const char *path, r2f2_dir_t *dir) {
+    if (!path || !dir) {
+        return RET_ERR;
+    }
+
+    size_t path_len = strlen(path);
+    if (path_len >= MAX_PATH_LEN) {
+        R2F2_LOG_ERR("path '%s' too long", path);
+        return RET_ERR;
+    }
+
+    /* trivial case: root directory */
+    if (path_len == 1 && *path == '/') {
+        dir->first_block = fs->root_dir_block;
+        dir->current_block = fs->root_dir_block;
+        dir->entry_index = 0;
+        return RET_OK;
+    }
+
+    /* trim trailing slash(es) in path */
+    char path_copy[MAX_PATH_LEN];
+    memset(path_copy, 0, MAX_PATH_LEN);
+    memcpy(path_copy, path, path_len);
+    char *end = path_copy + path_len;
+
+    while (end > path_copy && end[-1] == '/') {
+        *--end = '\0';
+    }
+
+    dir_meta_entry_t dme;
+    struct dir_traversal_ret dir_ret;
+    r2f2_ret ret = r2f2_get_dir_entry(fs, path_copy, &dme, &dir_ret);
+    RETURN_ON_ERR(ret);
+
+    flash_block_idx next[NUM_NEXT_PTRS];
+    memcpy(next, dme.next_block, sizeof(next));
+    RESULT(block_idx) next_block = get_valid_next_block(fs, next);
+    if (next_block.code != RET_OK) {
+        return next_block.code;
+    }
+
+    dir->first_block = next_block.value;
+    dir->current_block = next_block.value;
+    dir->entry_index = 0;
+
+    return RET_OK;
+}
+
+r2f2_ret r2f2_readdir(r2f2_fs_t *fs, r2f2_dir_t *dir, r2f2_dirent_t *entry) {
+    if (!dir || !entry) {
+        return RET_ERR;
+    }
+    dir_meta_entry_t dme;
+    entry_flags_t flags;
+    while (1) {
+        if (dir->entry_index >= NUM_DIR_META_ENTRIES) {
+            /* TODO: next block link */
+            return RET_OOB;
+        }
+
+        r2f2_ret ret = read_dir_meta_entry_flags(fs, dir->current_block,
+                                                 dir->entry_index, &flags);
+        RETURN_ON_ERR(ret);
+        /*
+         * abort as soon as we find our first unused entry (no more valid
+         * ones can come after)
+         */
+        if (is_entry_used(flags) == ENTRY_FLAG_UNSET) {
+            break;
+        }
+
+        if (is_entry_committed(flags) == ENTRY_FLAG_UNSET) {
+            dir->entry_index++;
+            continue;
+        }
+        if (is_entry_reclaimable(flags) == ENTRY_FLAG_SET) {
+            dir->entry_index++;
+            continue;
+        }
+
+        ret =
+            read_dir_meta_entry(fs, dir->current_block, dir->entry_index, &dme);
+        RETURN_ON_ERR(ret);
+        /* TODO: path ecc */
+        memcpy(entry->name, dme.path, MAX_PATH_LEN);
+
+        flash_block_idx next[NUM_NEXT_PTRS];
+        memcpy(next, dme.next_block, sizeof(next));
+        RESULT(block_idx) next_block = get_valid_next_block(fs, next);
+        if (next_block.code != RET_OK) {
+            return next_block.code;
+        }
+        RESULT(uint32_t) block_type = get_block_type(fs, next_block.value);
+        RETURN_ON_ERR(block_type.code);
+        entry->type = (block_type.value == BLOCK_TYPE_DIR) ? ENT_DIR : ENT_FILE;
+
+        dir->entry_index++;
+
+        return RET_OK;
+    }
+    return RET_OOB;
+}
+
+r2f2_ret r2f2_closedir(r2f2_fs_t *fs, r2f2_dir_t *dir) {
+    /* nop */
+    return RET_OK;
+}

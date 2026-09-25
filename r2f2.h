@@ -1,6 +1,7 @@
 #pragma once
 
 #include "r2f2_defines.h"
+#include "r2f2_dir.h"
 #include "r2f2_file.h"
 
 #include <sys/types.h>
@@ -57,6 +58,10 @@ ssize_t r2f2_read(r2f2_fs_t *fs, r2f2_fd fd, void *buf, size_t count);
 ssize_t r2f2_write(r2f2_fs_t *fs, r2f2_fd fd, const void *buf, size_t count);
 r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd);
 r2f2_ret r2f2_remove(r2f2_fs_t *fs, const char *path);
+
+r2f2_ret r2f2_opendir(r2f2_fs_t *fs, const char *path, r2f2_dir_t *dir);
+r2f2_ret r2f2_readdir(r2f2_fs_t *fs, r2f2_dir_t *dir, r2f2_dirent_t *entry);
+r2f2_ret r2f2_closedir(r2f2_fs_t *fs, r2f2_dir_t *dir);
 
 #ifdef __cplusplus
 }
