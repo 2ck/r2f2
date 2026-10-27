@@ -147,11 +147,14 @@ r2f2_ret r2f2_unmount(r2f2_fs_t *fs) {
 
 #ifdef ECC_ON_METADATA
     free_bch(fs->u32_bch);
+    fs->u32_bch = NULL;
     free_bch(fs->path_bch);
+    fs->path_bch = NULL;
 #endif
 
 #ifdef ECC_ON_DATA
     free_bch(fs->data_bch);
+    fs->data_bch = NULL;
 #endif
 
     return any_ret;
