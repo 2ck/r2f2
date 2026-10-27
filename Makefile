@@ -13,7 +13,7 @@ TESTS_SRCS = tests/basic.c tests/ecc.c
 TESTS_OBJS = $(patsubst %.c,$(BUILDDIR)/%.o,$(TESTS_SRCS))
 TESTS_BINS = $(patsubst %.c,$(BUILDDIR)/%,$(TESTS_SRCS))
 
-CFLAGS += -g -O0 -std=c11 -I.
+CFLAGS += -g -O3 -std=c11 -I.
 CFLAGS += -I ecc/bch
 CFLAGS += -Wall -Wextra -Wpedantic
 # disable warnings for the logging macros:

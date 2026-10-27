@@ -108,7 +108,6 @@ r2f2_ret r2f2_mount(r2f2_fs_t *fs) {
 
     /* TODO: check if base block contents match cfg */
     if (!is_fs_valid(fs, &fs_info)) {
-        R2F2_LOG_ERR("no valid file system found, format() necessary");
         return RET_ERR;
     } else {
         RESULT(block_idx) b = GET_FLASH_BLOCK_IDX(fs_info.root_dir_block);
