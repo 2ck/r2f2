@@ -97,7 +97,7 @@ typedef struct __attribute__((packed)) dir_meta_entry {
     flash_block_idx next_block[NUM_NEXT_PTRS];
 } dir_meta_entry_t;
 
-typedef struct dir_meta_block {
+typedef struct __attribute__((packed)) dir_meta_block {
     block_header_t header;
 
 #ifdef DOUBLE_METADATA
