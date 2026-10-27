@@ -2,6 +2,7 @@
 #include "r2f2.h"
 #include "r2f2_alloc.h"
 #include "r2f2_metadata.h"
+#include "util/debug_dump.h"
 #include "util/logger.h"
 #include <string.h>
 
@@ -153,7 +154,7 @@ uint32_t r2f2_reclaim_file_blocks(r2f2_fs_t *fs, dir_meta_entry_t *dme) {
         } else {
             R2F2_LOG_ERR("unexpected block type 0x%x in gc for block %u",
                          block_type.value, next_block.value);
-            dump_fs_dot(fs, "wrongblockheader.dot");
+            DEBUG_DUMP_FS_DOT(fs, "wrongblockheader.dot");
         }
 
         free_block(fs, next_block.value);

@@ -20,7 +20,15 @@ CFLAGS += -Wall -Wextra -Wpedantic
 CFLAGS += -Wno-gnu-zero-variadic-macro-arguments -Wno-gnu-auto-type
 # disable warnings for ugly ecc macros (which are temporary with a FIXME)
 CFLAGS += -Wno-gnu-statement-expression-from-macro-expansion
-#CFLAGS += -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined -fno-sanitize-recover=all
+
+# in test/native environment only:
+TEST_ENVIRONMENT ?= 0
+ifeq ($(TEST_ENVIRONMENT),1)
+	CFLAGS += -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined -fno-sanitize-recover=all
+    LDFLAGS += -fsanitize=address,undefined
+	CFLAGS += -DTEST_ENVIRONMENT
+endif
+
 LDFLAGS += -L $(BUILDDIR) -l r2f2
 
 OUTLIB = $(BUILDDIR)/libr2f2.a
@@ -34,7 +42,10 @@ $(OUTLIB): $(OBJS)
 	mkdir -p $(dir $@)
 	$(AR) rcs $@ $^
 
-tests: $(TESTS_BINS)
+tests:
+	$(MAKE) TEST_ENVIRONMENT=1 BUILDDIR=build/test tests-build
+
+tests-build: $(TESTS_BINS)
 
 $(BUILDDIR)/tests/%: $(BUILDDIR)/tests/%.o $(OUTLIB)
 	mkdir -p $(dir $@)
@@ -48,4 +59,4 @@ clean:
 	rm -rf $(BUILDDIR)
 
 -include $(DEPS)
-.PHONY: all tests clean
+.PHONY: all tests tests-build clean

@@ -1,5 +1,6 @@
 #include "r2f2_alloc.h"
 #include "r2f2_gc.h"
+#include "util/debug_dump.h"
 #include "util/helpers.h"
 #include "util/logger.h"
 #include <string.h>
@@ -170,7 +171,7 @@ RESULT(block_idx) allocate_block(r2f2_fs_t *fs) {
             R2F2_LOG_ERR(
                 "no more free blocks and garbage collection failed (%d)",
                 gc_ret.code);
-            dump_fs_dot(fs, "gc_fail.dot");
+            DEBUG_DUMP_FS_DOT(fs, "gc_fail.dot");
             return RESULT_ERR(block_idx, gc_ret.code);
         } else {
             R2F2_LOG_DEBUG("garbage collection recovered %u blocks",

@@ -4,6 +4,7 @@
 
 #include "r2f2.h"
 #include "r2f2_metadata.h"
+#include "util/debug_dump.h"
 
 #define FLASH_NUM_BLOCKS (32768U)
 #define FLASH_BLOCK_SIZE (4096U)
@@ -314,7 +315,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    dump_fs_dot(&fs, "tests-basic.dot");
+    DEBUG_DUMP_FS_DOT(&fs, "tests-basic.dot");
 
     return 0;
 }
