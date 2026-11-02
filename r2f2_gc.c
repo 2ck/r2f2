@@ -85,7 +85,7 @@ uint32_t r2f2_reclaim_dir_block(r2f2_fs_t *fs, block_idx dir_block,
 
                 /* overwrite dir entry for the deleted file to 0 */
                 memset(&dme, 0, sizeof(dir_meta_entry_t));
-                r2f2_ret ret = write_dir_meta_entry(fs, dir_block, d, &dme);
+                ret = write_dir_meta_entry(fs, dir_block, d, &dme);
                 if (ret != RET_OK) {
                     R2F2_LOG_ERR("failed (%d) to overwrite entry %d in "
                                  "dir_block %u",
@@ -244,9 +244,7 @@ r2f2_ret r2f2_migrate_root_dir_block(r2f2_fs_t *fs) {
     for (size_t i_r = 0; i_r < NUM_DIR_META_ENTRIES; i_r++) {
         /* read entry from read index */
         r2f2_ret ret = read_dir_meta_entry(fs, fs->root_dir_block, i_r, &dme);
-        if (ret != RET_OK) {
-            return ret;
-        }
+        RETURN_ON_ERR(ret);
 
         /* skip invalidated entries */
         if (is_all_zero(&dme, sizeof(dir_meta_entry_t))) {
@@ -259,7 +257,7 @@ r2f2_ret r2f2_migrate_root_dir_block(r2f2_fs_t *fs) {
             if (b.code != RET_OK) {
                 return b.code;
             }
-            r2f2_ret ret = write_block_header(fs, b.value, BLOCK_TYPE_DIR);
+            ret = write_block_header(fs, b.value, BLOCK_TYPE_DIR);
             RETURN_ON_ERR(ret);
             alloced = true;
         }
@@ -276,22 +274,17 @@ r2f2_ret r2f2_migrate_root_dir_block(r2f2_fs_t *fs) {
                             fs->root_dir_block * fs->cfg->geom.block_size +
                                 offsetof(dir_meta_block_t, next),
                             sizeof(next), next);
-    if (ret != RET_OK) {
-        return ret;
-    }
+    RETURN_ON_ERR(ret);
     RESULT(block_idx) next_block = get_valid_next_block(fs, next);
 
     if (i_w > 0) {
         /* path 1) */
         if (next_block.code == RET_OK) {
-            r2f2_ret ret =
-                fs->cfg->flash_write(fs,
-                                     b.value * fs->cfg->geom.block_size +
-                                         offsetof(dir_meta_block_t, next),
-                                     sizeof(block_idx), &next_block.value);
-            if (ret != RET_OK) {
-                return ret;
-            }
+            ret = fs->cfg->flash_write(fs,
+                                       b.value * fs->cfg->geom.block_size +
+                                           offsetof(dir_meta_block_t, next),
+                                       sizeof(block_idx), &next_block.value);
+            RETURN_ON_ERR(ret);
         }
         /* a) and b) */
         fs->root_dir_block = b.value;
@@ -304,10 +297,8 @@ r2f2_ret r2f2_migrate_root_dir_block(r2f2_fs_t *fs) {
             /* b) */
             R2F2_ASSERT(alloced, ==, false, "%d");
             b = allocate_block(fs);
-            if (b.code != RET_OK) {
-                return b.code;
-            }
-            r2f2_ret ret = write_block_header(fs, b.value, BLOCK_TYPE_DIR);
+            RETURN_ON_ERR(b.code);
+            ret = write_block_header(fs, b.value, BLOCK_TYPE_DIR);
             RETURN_ON_ERR(ret);
             fs->root_dir_block = b.value;
         }
@@ -357,7 +348,7 @@ r2f2_ret r2f2_migrate_dir_block_in_entry(r2f2_fs_t *fs, block_idx dir_block,
             R2F2_LOG_INFO("parent dir_block %u out of space", parent_block);
             if (parent_block == fs->root_dir_block) {
                 R2F2_LOG_INFO("trying to migrate root dir block");
-                r2f2_ret ret = r2f2_migrate_root_dir_block(fs);
+                ret = r2f2_migrate_root_dir_block(fs);
                 if (ret != RET_OK) {
                     R2F2_LOG_ERR("error (%d) migrating root_dir_block", ret);
                     return ret;

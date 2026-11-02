@@ -16,6 +16,7 @@ TESTS_BINS = $(patsubst %.c,$(BUILDDIR)/%,$(TESTS_SRCS))
 CFLAGS += -g -O3 -std=c11 -I.
 CFLAGS += -I ecc/bch
 CFLAGS += -Wall -Wextra -Wpedantic
+CFLAGS += -Wshadow
 # disable warnings for the logging macros:
 CFLAGS += -Wno-gnu-zero-variadic-macro-arguments -Wno-gnu-auto-type
 # disable warnings for ugly ecc macros (which are temporary with a FIXME)

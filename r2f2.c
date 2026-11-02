@@ -168,9 +168,9 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
 
     dir_meta_entry_t dme;
     struct dir_traversal_ret dir_ret;
-    r2f2_ret ret = r2f2_get_dir_entry(fs, path, &dme, &dir_ret);
+    r2f2_ret de_ret = r2f2_get_dir_entry(fs, path, &dme, &dir_ret);
 
-    if (ret == RET_OK) {
+    if (de_ret == RET_OK) {
         /* file exists already */
         flash_block_idx next[NUM_NEXT_PTRS];
         memcpy(next, dme.next_block, sizeof(next));
@@ -204,7 +204,6 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
                                                  last_fie.value, &fie);
             RETURN_ON_ERR(ret);
 
-            flash_block_idx next[NUM_NEXT_PTRS];
             memcpy(next, fie.seq_block, sizeof(next));
             RESULT(block_idx) seq_block = get_valid_next_block(fs, next);
             RETURN_ON_ERR(seq_block.code);
@@ -249,9 +248,7 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
         file_seq_entry_t fse;
         r2f2_ret ret =
             read_file_seq_entry(fs, seq_block_idx, last_fse.value, &fse);
-        if (ret != RET_OK) {
-            return ret;
-        }
+        RETURN_ON_ERR(ret);
 
         RESULT(r2f2_fd) fd = r2f2_create_fd(fs, path);
         if (fd.code != RET_OK) {
@@ -282,7 +279,7 @@ r2f2_fd r2f2_open(r2f2_fs_t *fs, const char *path, int oflag) {
         f->meta.data.last_block_offset_in_file = last_offset.value;
 
         return fd.value;
-    } else if (ret == RET_NOT_FOUND && creat) {
+    } else if (de_ret == RET_NOT_FOUND && creat) {
         /* file doesn't exist but we're supposed to create it */
         RESULT(r2f2_fd) fd = r2f2_register_file(fs, path);
         if (fd.code != RET_OK) {
@@ -352,10 +349,9 @@ r2f2_ret r2f2_mkdir(r2f2_fs_t *fs, const char *path) {
             return dme_num.code;
         }
 
-        dir_meta_entry_t dme;
         memset(&dme, 0xFF, sizeof(dir_meta_entry_t));
 
-        r2f2_ret ret = set_path_to_basename_zeroed(dme.path, path_copy);
+        ret = set_path_to_basename_zeroed(dme.path, path_copy);
         RETURN_ON_ERR(ret);
 #ifdef ECC_ON_METADATA
         memset(dme.path_ecc, 0, ECC_BCH_PATH_ECCLEN);
@@ -604,10 +600,8 @@ r2f2_ret r2f2_fsync(r2f2_fs_t *fs, r2f2_fd fd) {
         if (f->meta.seq.next_entry >= NUM_FILE_SEQ_ENTRIES) {
             if (f->meta.indir.block == 0) {
                 /* we didn't have a file_indir_block yet, but now we need one */
-                r2f2_ret ret = r2f2_migrate_file_to_indir_block(fs, fd);
-                if (ret != RET_OK) {
-                    return ret;
-                }
+                ret = r2f2_migrate_file_to_indir_block(fs, fd);
+                RETURN_ON_ERR(ret);
             }
 
             RESULT(block_idx) seq_block_idx = allocate_block(fs);

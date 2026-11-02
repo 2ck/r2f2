@@ -113,11 +113,11 @@ typedef block_idx flash_block_idx;
 /* FIXME: get rid of block_idx and just use uint32_t? */
 #define GET_FLASH_BLOCK_IDX(bix)                                               \
     ({                                                                         \
-        RESULT(uint32_t) r = GET_FLASH_U32(bix);                               \
-        RESULT(block_idx) b;                                                   \
-        b.code = r.code;                                                       \
-        b.value = r.value;                                                     \
-        b;                                                                     \
+        RESULT(uint32_t) _r = GET_FLASH_U32(bix);                              \
+        RESULT(block_idx) _b;                                                  \
+        _b.code = _r.code;                                                     \
+        _b.value = _r.value;                                                   \
+        _b;                                                                    \
     })
 #define SET_FLASH_BLOCK_IDX(bix, val) SET_FLASH_U32(bix, val)
 

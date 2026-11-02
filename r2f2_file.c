@@ -97,19 +97,20 @@ RESULT(block_idx) r2f2_find_dir_meta_block(r2f2_fs_t *fs, const char *path) {
                 break;
             }
 
-			if (is_entry_committed(flags) == ENTRY_FLAG_UNSET) {
-				continue;
-			}
-			if (is_entry_reclaimable(flags) == ENTRY_FLAG_SET) {
-				continue;
-			}
+            if (is_entry_committed(flags) == ENTRY_FLAG_UNSET) {
+                continue;
+            }
+            if (is_entry_reclaimable(flags) == ENTRY_FLAG_SET) {
+                continue;
+            }
 
             read_dir_meta_entry(fs, current_block, i, &dme);
 
 #ifdef ECC_ON_METADATA
             r2f2_ret ecc_ret = correct_path(fs, dme.path, dme.path_ecc);
             if (ecc_ret != RET_OK) {
-				R2F2_LOG_ERR("failed (%d) to correct path '%.*s'", ecc_ret, MAX_PATH_LEN, dme.path);
+                R2F2_LOG_ERR("failed (%d) to correct path '%.*s'", ecc_ret,
+                             MAX_PATH_LEN, dme.path);
             }
 #endif
             bool match = memcmp(dme.path, segment, MAX_PATH_LEN) == 0;
