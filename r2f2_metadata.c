@@ -40,6 +40,10 @@ RESULT(uint32_t) get_block_type(r2f2_fs_t *fs, block_idx b) {
 }
 
 #ifdef ECC_ON_DATA
+typedef struct __attribute__((packed)) chunk_len_t {
+    uint8_t data[2];
+    uint8_t ecc[ECC_BCH_U32_ECCLEN];
+} flash_chunk_len;
 r2f2_ret r2f2_write_data(r2f2_fs_t *fs, block_idx data_block,
                          size_t data_block_fill, size_t data_len,
                          uint8_t *data) {
@@ -80,12 +84,15 @@ r2f2_ret r2f2_write_data(r2f2_fs_t *fs, block_idx data_block,
         /* last bytes of block contain data length for the respective chunk */
         size_t num_chunks = fs->cfg->geom.block_size / fs->cfg->geom.page_size -
                             ECC_BCH_DATA_RESV_PG;
-        const size_t BYTES_PER_CHUNKLEN = 2;
         size_t len_addr = (data_block + 1) * fs->cfg->geom.block_size -
-                          (num_chunks - chunk_idx) * BYTES_PER_CHUNKLEN;
-        uint16_t chunk_len = (uint16_t)to_write;
-        ret =
-            fs->cfg->flash_write(fs, len_addr, BYTES_PER_CHUNKLEN, &chunk_len);
+                          (num_chunks - chunk_idx) * sizeof(flash_chunk_len);
+        uint16_t val = (uint16_t)to_write;
+        flash_chunk_len l;
+        memset(&l, 0, sizeof(flash_chunk_len));
+        memcpy(l.data, &val, sizeof(l.data));
+        encode_bch(fs->u32_bch, l.data, sizeof(l.data), l.ecc);
+
+        ret = fs->cfg->flash_write(fs, len_addr, sizeof(flash_chunk_len), &l);
         RETURN_ON_ERR(ret);
 
         written += to_write;
@@ -122,23 +129,57 @@ r2f2_ret r2f2_read_data(r2f2_fs_t *fs, block_idx data_block, size_t off,
     size_t chunk_idx = 0;
     size_t off_in_chunk = 0;
 
-    const size_t BYTES_PER_CHUNKLEN = 2;
     size_t num_chunks = fs->cfg->geom.block_size / fs->cfg->geom.page_size -
                         ECC_BCH_DATA_RESV_PG;
+    uint16_t chunk_lens[num_chunks];
+    memset(chunk_lens, 0, sizeof(chunk_lens));
+
     /*
      * We need to determine the chunk to read from based on the logical chunk
      * sizes in case we wrote < chunk_size at some point.
      */
-    uint16_t chunk_lens[num_chunks];
+    flash_chunk_len flash_chunk_lens[num_chunks];
     r2f2_ret ret =
         fs->cfg->flash_read(fs,
                             (data_block + 1) * fs->cfg->geom.block_size -
-                                (num_chunks * BYTES_PER_CHUNKLEN),
-                            sizeof(chunk_lens), chunk_lens);
+                                (num_chunks * sizeof(flash_chunk_len)),
+                            sizeof(flash_chunk_lens), flash_chunk_lens);
     RETURN_ON_ERR(ret);
 
     size_t chunk_off = 0;
     for (size_t i = 0; i < num_chunks; i++) {
+        uint32_t err_loc[ECC_BCH_U32_T] = {0};
+        int dec_ret = decode_bch(fs->u32_bch, flash_chunk_lens[i].data,
+                                 sizeof(flash_chunk_lens[i].data),
+                                 flash_chunk_lens[i].ecc, NULL, NULL, err_loc);
+        /* bch_counts[BCHC_U32_IDX].decodes++; */
+        if (dec_ret < 0) {
+            if (is_close_to_all_one(&flash_chunk_lens[i],
+                                    sizeof(flash_chunk_lens[i]),
+                                    ECC_BCH_U32_T)) {
+                /*
+                 * This was probably uninitialized flash, it may even have a few
+                 * bits flipped. So, not a valid chunk length, have to skip.
+                 */
+                break;
+            }
+            R2F2_LOG_ERR("data chunk length ([%u, %u]) ECC decode error!",
+                         flash_chunk_lens[i].data[0],
+                         flash_chunk_lens[i].data[1]);
+            return RET_ECC_ERR;
+        } else if (dec_ret > 0) {
+            for (int err = 0; err < dec_ret; err++) {
+                uint32_t loc = err_loc[err];
+                if (loc >= 8 * sizeof(flash_chunk_lens[i].data)) {
+                    /* error in ecc, can be ignored */
+                    continue;
+                }
+                flash_chunk_lens[i].data[loc / 8] ^= (1 << (loc % 8));
+            }
+        }
+
+        memcpy(&chunk_lens[i], flash_chunk_lens[i].data, sizeof(chunk_lens[i]));
+
         if (chunk_off == off ||
             (chunk_off <= off && chunk_off + chunk_lens[i] > off)) {
             chunk_idx = i;
@@ -149,16 +190,10 @@ r2f2_ret r2f2_read_data(r2f2_fs_t *fs, block_idx data_block, size_t off,
 
     while (read < len) {
         R2F2_ASSERT(chunk_idx, <, num_chunks, "%zu");
+        R2F2_ASSERT(chunk_lens[chunk_idx], >, off_in_chunk, "%u");
+        R2F2_ASSERT(chunk_lens[chunk_idx], <=, fs->cfg->geom.page_size, "%u");
 
-        uint16_t chunk_len;
-        size_t len_addr = (data_block + 1) * fs->cfg->geom.block_size -
-                          (num_chunks - chunk_idx) * BYTES_PER_CHUNKLEN;
-        r2f2_ret ret =
-            fs->cfg->flash_read(fs, len_addr, BYTES_PER_CHUNKLEN, &chunk_len);
-        RETURN_ON_ERR(ret);
-        R2F2_ASSERT(chunk_len, >, off_in_chunk, "%u");
-
-        size_t to_read = MIN(len - read, chunk_len - off_in_chunk);
+        size_t to_read = MIN(len - read, chunk_lens[chunk_idx] - off_in_chunk);
 
         size_t read_pos = data_block * fs->cfg->geom.block_size +
                           chunk_idx * fs->cfg->geom.page_size;
